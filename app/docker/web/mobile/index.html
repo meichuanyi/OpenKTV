@@ -291,9 +291,9 @@ header{
       <option value="1080">1080P 高清</option>
     </select>
   </div>
-  <div id="online-list" style="margin-top:12px"></div>
-  <div class="online-h" id="tasks-h" style="display:none">⬇ 下载任务</div>
+  <div class="online-h" id="tasks-h" style="display:none;margin-top:14px">⬇ 下载任务</div>
   <div id="online-tasks"></div>
+  <div id="online-list"></div>
 </div>
 
 <div id="queue-fab" onclick="switchTabByName('queue')">
@@ -435,7 +435,7 @@ function showToast(msg){
 }
 
 // ===== 在线搜索 & 下载(代理 ktv-tools) =====
-let onlineSource='bilibili', onlineTimer, tasksTimer, lastDoneTitles={};
+let onlineSource='bilibili', onlineTimer, tasksTimer, lastDoneTitles={}, taskBtns={};
 const onlineInput=document.getElementById('online-input');
 
 function setOnlineSource(s){
@@ -486,7 +486,7 @@ function renderOnline(list, source){
   });
 }
 async function startDownload(item, btn){
-  btn.disabled=true;btn.textContent='已加入';
+  btn.disabled=true;btn.textContent='…';btn.style.background='';
   const quality=document.getElementById('quality-sel').value;
   try{
     const res=await fetch('/api/online/download',{
@@ -495,12 +495,32 @@ async function startDownload(item, btn){
     });
     const data=await res.json();
     if(!res.ok) throw new Error(data.error||res.status);
+    taskBtns[data.task_id]={btn};
+    btn.textContent='排队中';
     showToast('已加入下载队列 ⬇');
     pollTasks();
   }catch(e){
     showToast('下载失败:'+String(e.message||e));
     btn.disabled=false;btn.textContent='下载';
   }
+}
+// 把任务状态同步回对应卡片上的下载按钮:排队中 → 百分比 → 入库中 → 已入库✓/重试
+function updateTaskButtons(tasks){
+  tasks.forEach(t=>{
+    const ref=taskBtns[t.id];
+    if(!ref||!ref.btn.isConnected) return;
+    const b=ref.btn;
+    if(t.status==='queued'){b.textContent='排队中';}
+    else if(t.status==='downloading'){b.textContent=(t.progress||0)+'%';}
+    else if(t.status==='moving'){b.textContent='入库中';}
+    else if(t.status==='done'){
+      b.textContent='已入库✓';
+      b.style.background='rgba(54,217,247,.35)';
+    }else if(t.status==='failed'){
+      b.disabled=false;b.textContent='重试';
+      b.style.background='rgba(255,79,155,.35)';
+    }
+  });
 }
 function pollTasks(){
   if(tasksTimer) return;
@@ -509,6 +529,7 @@ function pollTasks(){
       const res=await fetch('/api/online/tasks');
       const tasks=await res.json();
       renderTasks(tasks);
+      updateTaskButtons(tasks);
       const active=tasks.some(t=>['queued','downloading','moving'].includes(t.status));
       const finishedNow=tasks.find(t=>t.status==='done'&&t.result&&!lastDoneTitles[t.id]);
       if(finishedNow){
