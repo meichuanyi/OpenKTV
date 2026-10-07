@@ -19,3 +19,4 @@ data/
 *.db-journal
 *.db-wal
 *.db-shm
+ktv-tools/app/__pycache__/
