@@ -65,7 +65,7 @@ router.post('/download', async (req, res) => {
     const r = await toolsJSON('/download', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, title, artist, quality }),
+      body: JSON.stringify({ url, title, artist, quality, ktv: !!req.body.ktv }),
     });
     log.info('ONLINE', `下载下单: ${artist || '?'} - ${title || '?'} <- ${url}`);
     res.status(r.status).json(r.body);

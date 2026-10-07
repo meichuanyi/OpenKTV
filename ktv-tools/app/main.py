@@ -94,10 +94,13 @@ def _run_download_task(task: dict):
     if task["result"].get("audio_tracks") == 1 and AUTO_SEPARATE:
         merged = _separate_and_merge(LIBRARY_DIR / task["result"]["filename"], task)
         task["result"].update(merged)
-    # 双音轨就绪后自动内嵌逐字歌词(取不到歌词就跳过,不算失败)
-    if task["result"].get("audio_tracks") == 2:
-        task["result"].update(_burn_lyrics(
-            LIBRARY_DIR / task["result"]["filename"], task))
+    final_path = LIBRARY_DIR / task["result"]["filename"]
+    if task.get("ktv_source"):
+        # KTV版素材自带专业字幕(通常还自带双音轨),不需要 AI 烧录
+        (LIBRARY_DIR / f"{final_path.name}.ktv-ok").write_text("KTV版素材自带字幕", encoding="utf-8")
+        task["result"]["lyrics"] = "native-ktv"
+    elif task["result"].get("audio_tracks") == 2:
+        task["result"].update(_burn_lyrics(final_path, task))
     task["progress"] = 100
     task["status"] = "done"
 
@@ -246,6 +249,7 @@ class DownloadBody(BaseModel):
     title: str
     artist: str = ""
     quality: str = "720"
+    ktv: bool = False  # KTV版素材:自带烧录字幕,跳过歌词内嵌;双音轨则连分离也跳过
 
 
 @app.post("/download")
@@ -257,12 +261,14 @@ def download(body: DownloadBody):
     artist, title = _guess_artist_title(body.artist.strip(), body.title.strip())
     if not title:
         raise HTTPException(400, "歌名为空")
+    ktv_source = body.ktv or bool(re.search(r"KTV|卡拉OK|卡拉ok| Karaoke", body.title, re.I))
     tid = _register(
         {
             "url": body.url,
             "artist": artist,
             "title": title,
             "quality": body.quality,
+            "ktv_source": ktv_source,
         }
     )
     return {"task_id": tid}

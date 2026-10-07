@@ -114,15 +114,19 @@ def _shape_results(results: list[dict], limit: int) -> list[dict]:
         bvid = (item.get("bvid") or "").strip()
         if not bvid:
             continue
+        title = clean_title(item.get("title", ""))
         shaped.append(
             {
                 "video_id": bvid,
-                "title": clean_title(item.get("title", "")),
+                "title": title,
                 "url": VIDEO_URL.format(bvid=bvid),
                 "channel": (item.get("author") or "").strip(),
                 "duration": parse_duration(item.get("duration", "")),
                 "thumbnail": thumbnail_url(item.get("pic", "")),
                 "source": "bilibili",
+                # KTV版标记:标题含 KTV/卡拉OK 的素材自带专业字幕(常带双音轨),
+                # 前端置顶展示,下载后跳过AI歌词烧录
+                "ktv": bool(re.search(r"KTV|卡拉OK|卡拉ok", title)),
             }
         )
         if len(shaped) >= limit:

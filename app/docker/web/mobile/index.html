@@ -635,6 +635,8 @@ function renderOnline(list, source){
   const el=document.getElementById('online-list');
   if(!list.length){el.innerHTML='<div style="color:#555;text-align:center;padding:26px;font-size:13px">没有结果,换个关键词或切到另一个源</div>';return;}
   el.innerHTML='';
+  // KTV版置顶:自带专业字幕(常带双音轨伴唱),比AI烧录更准
+  list=[...list].sort((a,b)=>(b.ktv?1:0)-(a.ktv?1:0));
   list.forEach(item=>{
     const c=document.createElement('div');
     c.className='o-card';
@@ -644,6 +646,7 @@ function renderOnline(list, source){
         <div class="title">${escHtml(item.title)}</div>
         <div class="meta">
           <span class="o-src">${item.source==='youtube'?'YT':'B站'}</span>
+          ${item.ktv?'<span class="o-src" style="background:rgba(255,140,66,.2);color:var(--orange)">KTV版·自带字幕</span>':''}
           <span>${escHtml(item.channel||'')}</span>
           <span>${escHtml(item.duration||'')}</span>
         </div>
@@ -659,7 +662,7 @@ async function startDownload(item, btn){
   try{
     const res=await fetch('/api/online/download',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({url:item.url,title:item.title,artist:'',quality})
+      body:JSON.stringify({url:item.url,title:item.title,artist:'',quality,ktv:!!item.ktv})
     });
     const data=await res.json();
     if(!res.ok) throw new Error(data.error||res.status);

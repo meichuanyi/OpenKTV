@@ -102,7 +102,17 @@ def fetch_lrc(title: str, artist: str) -> tuple[str, str] | None:
     return None
 
 
-def parse_lrc(lrc: str) -> list[dict]:
+# LRC 元数据行过滤:网易云/QQ 的写法都要覆盖(QQ 是"词:周杰伦"这种短前缀,
+# 还有"合声"这种变体);漏掉的话标题行会当第一句歌词,全局平移直接错几十秒。
+_LRC_JUNK = re.compile(
+    r"^(作词|作曲|编曲|制作人|和声|合声|词|曲|吉他|贝斯|鼓|键盘|弦乐|录音|混音|母带|词曲|出版|"
+    r"OP|SP|MV|Vocal|Guitar|Bass|Drums?|Producer|Lyricist|Composer|Arrang|Written|Lyrics|Music|"
+    r"原词|原唱|翻唱|字幕|制作)",
+    re.I,
+)
+
+
+def parse_lrc(lrc: str, title: str = "", artist: str = "") -> list[dict]:
     out = []
     for line in lrc.splitlines():
         m = re.match(r"^\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?\](.*)$", line)
@@ -110,8 +120,14 @@ def parse_lrc(lrc: str) -> list[dict]:
             continue
         t = int(m[1]) * 60 + int(m[2]) + (float(f"0.{m[3]}") if m[3] else 0)
         text = m[4].strip()
-        if text and not re.match(r"^(作词|作曲|编曲|制作人|和声|吉他|贝斯|鼓|键盘|弦乐|录音|混音|母带|词曲|出版|OP|SP|MV|Vocal|Guitar|Bass|Drum|Producer|Lyricist|Composer)", text):
-            out.append({"t": round(t, 3), "text": text})
+        if not text or _LRC_JUNK.match(text):
+            continue
+        # 首行"歌名 - 歌手"式标题行
+        if title and text == f"{title} - {artist}".strip() and not out:
+            continue
+        if title and artist and title in text and artist in text and "-" in text and t < 30:
+            continue
+        out.append({"t": round(t, 3), "text": text})
     out.sort(key=lambda x: x["t"])
     return out
 
@@ -360,7 +376,7 @@ def process(path: Path, title: str, artist: str,
     if not got:
         return None
     lrc, source = got
-    lines = parse_lrc(lrc)
+    lines = parse_lrc(lrc, title, artist)
     if len(lines) < 5:
         return None
     import tempfile
