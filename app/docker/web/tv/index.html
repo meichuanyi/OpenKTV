@@ -1953,8 +1953,12 @@ fetch('/api/queue').then(r=>r.json()).then(d=>{queueData=d;renderAll();});
   text-overflow:ellipsis;font-size:36px;line-height:1.35}
 #lyric-overlay .ly-next{font-size:22px;font-weight:700;color:rgba(255,255,255,.38);text-shadow:0 2px 8px rgba(0,0,0,.8)}
 #lyric-overlay .ly-next2{font-size:18px}
-#lyric-overlay .ly-hi{position:absolute;left:0;top:0;width:0;overflow:hidden;white-space:nowrap;
-  background:linear-gradient(90deg,#ffd85e,#ff9d3c);-webkit-background-clip:text;background-clip:text;color:transparent}
+#lyric-overlay #ly-base{display:inline-block}
+#lyric-overlay .ly-hi{position:absolute;left:0;top:0;width:0;overflow:hidden;white-space:nowrap;display:inline-block;
+  background:linear-gradient(90deg,#ffd85e,#ff9d3c);-webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;color:#ffd85e}
+/* 老电视内核不支持 background-clip:text 时降级:纯金色文字,靠宽度裁切仍有扫光效果 */
+#lyric-overlay.no-clip .ly-hi{background:none;-webkit-text-fill-color:initial;color:#ffd85e}
 #lyric-overlay .ly-ctrl{pointer-events:auto;display:flex;gap:8px;margin-top:2px;opacity:.25;transition:.2s}
 #lyric-overlay .ly-ctrl:hover{opacity:1}
 #lyric-overlay .ly-ctrl button{background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.25);
@@ -1970,6 +1974,7 @@ fetch('/api/queue').then(r=>r.json()).then(d=>{queueData=d;renderAll();});
     +'<div class="ly-line ly-next ly-next2" id="ly-n2"></div>'
     +'<div class="ly-ctrl"><button id="ly-m">−0.5s</button><button id="ly-p">+0.5s</button><button id="ly-h">隐藏</button></div>';
   document.body.appendChild(ov);
+  if(!(window.CSS&&(CSS.supports('-webkit-background-clip','text')||CSS.supports('background-clip','text'))))ov.classList.add('no-clip');
   const el={src:ov.querySelector('#ly-src'),base:ov.querySelector('#ly-base'),hi:ov.querySelector('#ly-hi'),
     hiT:ov.querySelector('#ly-hi-t'),cur:ov.querySelector('#ly-cur'),n1:ov.querySelector('#ly-n1'),n2:ov.querySelector('#ly-n2')};
   let LINES=[],reqId=null,off=parseFloat(localStorage.getItem('ly_off')||'0');
@@ -1998,7 +2003,7 @@ fetch('/api/queue').then(r=>r.json()).then(d=>{queueData=d;renderAll();});
         el.base.textContent=cur.text;el.hiT.textContent=cur.text;
         const dur=(nxt?nxt.t:(cur.t+8))-cur.t;
         const pct=Math.max(0,Math.min(1,(now-cur.t)/Math.max(dur,0.5)));
-        el.hi.style.width=(el.base.scrollWidth*pct)+'px';
+        el.hi.style.width=(el.base.getBoundingClientRect().width*pct)+'px';
         el.n1.textContent=nxt?nxt.text:'';
         el.n2.textContent=LINES[i+2]?LINES[i+2].text:'';
       }
