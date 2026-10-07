@@ -96,8 +96,8 @@ def _run_download_task(task: dict):
         task["result"].update(merged)
     # 双音轨就绪后自动内嵌逐字歌词(取不到歌词就跳过,不算失败)
     if task["result"].get("audio_tracks") == 2:
-        task["result"]["lyrics"] = _burn_lyrics(
-            LIBRARY_DIR / task["result"]["filename"], task)["lyrics"]
+        task["result"].update(_burn_lyrics(
+            LIBRARY_DIR / task["result"]["filename"], task))
     task["progress"] = 100
     task["status"] = "done"
 
@@ -108,7 +108,7 @@ def _run_separate_task(task: dict):
     result.update(merged)
     task["result"] = result
     if result.get("audio_tracks") == 2:
-        result["lyrics"] = _burn_lyrics(LIBRARY_DIR / task["file"], task)["lyrics"]
+        result.update(_burn_lyrics(LIBRARY_DIR / task["file"], task))
     task["progress"] = 100
     task["status"] = "done"
 
