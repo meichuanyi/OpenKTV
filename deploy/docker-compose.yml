@@ -1,0 +1,46 @@
+# ktv-fusion 完整栈部署样例(飞牛/群晖/任意 Docker 主机通用)
+# 用法:
+#   1. 按需改下方路径与密码
+#   2. junyao-ktv 镜像: 在仓库根 docker build -t junyao-ktv:fused app/docker
+#      ktv-tools  镜像: 先构建 maiba 基础镜像(见 README),再 docker build -t ktv-tools:latest ktv-tools
+#   3. docker compose up -d
+services:
+  junyao-ktv:
+    image: junyao-ktv:fused
+    container_name: junyao-ktv
+    restart: unless-stopped
+    ports:
+      - "8083:8080"
+    environment:
+      - TZ=Asia/Shanghai
+      - PORT=8080
+      - DATA_DIR=/data
+      - ADMIN_PASSWORD=change-me
+      - VAAPI_DEVICE=/dev/dri/renderD128   # 无核显删掉此行与下方 devices
+      - HLS_CACHE_MAX_AGE_DAYS=3
+      - TOOLS_URL=http://ktv-tools:9000
+    volumes:
+      - /vol1/1000/docker/junyao-ktv/data:/data
+      - /vol2/1000/ktv/mv:/mv/library1
+      - /vol2/1000/ktv/singer:/singer
+    devices:
+      - /dev/dri:/dev/dri
+    depends_on:
+      - ktv-tools
+
+  ktv-tools:
+    image: ktv-tools:latest
+    container_name: ktv-tools
+    user: "1000:1001"                      # 与曲库目录属主一致,避免 root 落盘
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+      - OMP_NUM_THREADS=2                  # Demucs 分离线程数,建议 CPU 核数一半
+      - YTDLP_PROXY=http://192.168.6.100:7890  # 仅 YouTube 走代理,B站直连;没有可留空
+      - SEPARATE_TIMEOUT=1800              # 单首分离限时(秒)
+    volumes:
+      - /vol2/1000/ktv/mv:/library         # 与 junyao 的曲库目录指向同一宿主机目录
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"                      # 限核,防止分离时拖垮 NAS 其他服务
