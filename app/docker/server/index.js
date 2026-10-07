@@ -163,6 +163,9 @@ app.use('/api/online', require('./online'));
 // ---------- AI 点歌助手/推荐(Phase 3, 依赖广播与数据库) ----------
 app.use('/api/ai', require('./ai')({ db, broadcastQueue, log }));
 
+// ---------- 歌词服务(网易云LRC+缓存, 电视端逐字扫光用) ----------
+app.use('/api/lyrics', require('./lyrics')({ db, log }));
+
 // ---------- MCP 服务(任意 MCP 客户端可点歌/管理MV, Phase 3) ----------
 app.use('/mcp', require('./mcp')({ db, broadcastQueue, log, scanLibrary, removeHLS }));
 

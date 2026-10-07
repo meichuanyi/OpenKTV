@@ -1328,7 +1328,7 @@ function renderAll(){
     document.getElementById('ni-meta').textContent=`${playing.artist||''} · ${playing.nickname}`;
     document.getElementById('ov-title').textContent=playing.title;
     document.getElementById('ov-artist').textContent=`${playing.artist||''} · ${playing.nickname}`;
-    if(!curSong||curSong.queue_id!==playing.queue_id){curSong=playing;loadSong(video,playing.song_id);endingNotified=false;}
+    if(!curSong||curSong.queue_id!==playing.queue_id){curSong=playing;loadSong(video,playing.song_id);endingNotified=false;if(window.loadLyrics)loadLyrics(playing.song_id);}
   }else{document.getElementById('now-idle').style.display='flex';video.style.display='none';document.getElementById('now-info').classList.remove('show');document.getElementById('video-loading').classList.remove('show');hideToast();curSong=null;destroyHls();video.removeAttribute('src');video.load();
     if(isFS)exitKtvFullscreen();}
 }
@@ -1941,5 +1941,72 @@ window.addEventListener('resize',fitArtistGrid);
 window.addEventListener('orientationchange',fitArtistGrid);
 fetch('/api/queue').then(r=>r.json()).then(d=>{queueData=d;renderAll();});
 </script>
+
+<!-- ====== 歌词逐字扫光浮层(open-ktv 新增) ====== -->
+<style>
+#lyric-overlay{position:fixed;left:0;right:0;bottom:7vh;z-index:60;display:flex;flex-direction:column;
+  align-items:center;gap:8px;pointer-events:none;transition:opacity .3s}
+#lyric-overlay.hide{opacity:0}
+#lyric-overlay .ly-src{font-size:14px;color:rgba(255,255,255,.45);text-shadow:0 1px 6px #000}
+#lyric-overlay .ly-line{position:relative;font-weight:900;color:rgba(255,255,255,.9);
+  text-shadow:0 2px 14px rgba(0,0,0,.9);white-space:nowrap;max-width:92vw;overflow:hidden;
+  text-overflow:ellipsis;font-size:36px;line-height:1.35}
+#lyric-overlay .ly-next{font-size:22px;font-weight:700;color:rgba(255,255,255,.38);text-shadow:0 2px 8px rgba(0,0,0,.8)}
+#lyric-overlay .ly-next2{font-size:18px}
+#lyric-overlay .ly-hi{position:absolute;left:0;top:0;width:0;overflow:hidden;white-space:nowrap;
+  background:linear-gradient(90deg,#ffd85e,#ff9d3c);-webkit-background-clip:text;background-clip:text;color:transparent}
+#lyric-overlay .ly-ctrl{pointer-events:auto;display:flex;gap:8px;margin-top:2px;opacity:.25;transition:.2s}
+#lyric-overlay .ly-ctrl:hover{opacity:1}
+#lyric-overlay .ly-ctrl button{background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.25);
+  color:#fff;font-size:14px;border-radius:8px;padding:4px 12px}
+</style>
+<script>
+(function(){
+  const ov=document.createElement('div');
+  ov.id='lyric-overlay';
+  ov.innerHTML='<div class="ly-src" id="ly-src"></div>'
+    +'<div class="ly-line" id="ly-cur"><span id="ly-base"></span><span class="ly-hi" id="ly-hi"><span id="ly-hi-t"></span></span></div>'
+    +'<div class="ly-line ly-next" id="ly-n1"></div>'
+    +'<div class="ly-line ly-next ly-next2" id="ly-n2"></div>'
+    +'<div class="ly-ctrl"><button id="ly-m">−0.5s</button><button id="ly-p">+0.5s</button><button id="ly-h">隐藏</button></div>';
+  document.body.appendChild(ov);
+  const el={src:ov.querySelector('#ly-src'),base:ov.querySelector('#ly-base'),hi:ov.querySelector('#ly-hi'),
+    hiT:ov.querySelector('#ly-hi-t'),cur:ov.querySelector('#ly-cur'),n1:ov.querySelector('#ly-n1'),n2:ov.querySelector('#ly-n2')};
+  let LINES=[],reqId=null,off=parseFloat(localStorage.getItem('ly_off')||'0');
+  function setOff(v){off=v;localStorage.setItem('ly_off',v);el.src.textContent=(el.src.dataset.s||'')+(off?('  ⏱'+(off>0?'+':'')+off.toFixed(1)+'s'):'');}
+  ov.querySelector('#ly-m').onclick=()=>setOff(off-0.5);
+  ov.querySelector('#ly-p').onclick=()=>setOff(off+0.5);
+  ov.querySelector('#ly-h').onclick=()=>ov.classList.toggle('hide');
+  window.loadLyrics=async function(songId){
+    const my=reqId=songId;LINES=[];el.src.textContent='';el.base.textContent='';el.hiT.textContent='';
+    el.hi.style.width='0';el.n1.textContent='';el.n2.textContent='';
+    try{
+      const r=await fetch('/api/lyrics/'+my);const d=await r.json();
+      if(reqId!==my)return;
+      if(d.lyrics&&d.lyrics.length){LINES=d.lyrics;el.src.dataset.s=d.source||'';setOff(off);}
+    }catch(e){}
+  };
+  const video=document.getElementById('ktv-video');
+  (function tick(){
+    if(LINES.length){
+      const now=(video.currentTime||0)+off;
+      let i=-1;
+      for(let k=0;k<LINES.length;k++){if(LINES[k].t<=now)i=k;else break;}
+      if(i<0){el.base.textContent='';el.hi.style.width='0';el.n1.textContent=LINES[0]?LINES[0].text:'';el.n2.textContent=LINES[1]?LINES[1].text:'';}
+      else{
+        const cur=LINES[i],nxt=LINES[i+1];
+        el.base.textContent=cur.text;el.hiT.textContent=cur.text;
+        const dur=(nxt?nxt.t:(cur.t+8))-cur.t;
+        const pct=Math.max(0,Math.min(1,(now-cur.t)/Math.max(dur,0.5)));
+        el.hi.style.width=(el.base.scrollWidth*pct)+'px';
+        el.n1.textContent=nxt?nxt.text:'';
+        el.n2.textContent=LINES[i+2]?LINES[i+2].text:'';
+      }
+    }
+    requestAnimationFrame(tick);
+  })();
+})();
+</script>
+
 </body>
 </html>
