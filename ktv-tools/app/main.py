@@ -10,6 +10,7 @@ import shutil
 import queue
 import re
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -26,6 +27,10 @@ QUALITIES = {"480": 480, "720": 720, "1080": 1080}
 # 仅 YouTube 走代理(B站等国内源必须直连,全局代理会被 CDN 掐 TLS)。
 YTDLP_PROXY = os.environ.get("YTDLP_PROXY", "").strip()
 _PROXY_DOMAINS = ("youtube.com", "youtu.be", "googlevideo.com")
+# Demucs 分离配置:模型、单首限时、下载完是否自动接续分离(合成双音轨)。
+DEMUCS_MODEL = os.environ.get("DEMUCS_MODEL", "htdemucs")
+SEPARATE_TIMEOUT = int(os.environ.get("SEPARATE_TIMEOUT", "1800"))
+AUTO_SEPARATE = os.environ.get("AUTO_SEPARATE", "1") == "1"
 
 
 def _proxy_args(url: str) -> list[str]:
@@ -66,17 +71,37 @@ def _worker():
         if not task:
             continue
         try:
-            task["status"] = "downloading"
-            downloaded = _ytdlp_download(task)
-            task["status"] = "moving"
-            task["result"] = _finalize(downloaded, task)
-            task["progress"] = 100
-            task["status"] = "done"
+            if task.get("kind") == "separate":
+                _run_separate_task(task)
+            else:
+                _run_download_task(task)
         except Exception as e:  # noqa: BLE001 —— 队列 worker 兜一切异常
             task["status"] = "failed"
             task["error"] = str(e)[:500]
         finally:
             _cleanup_staging()
+
+
+def _run_download_task(task: dict):
+    task["status"] = "downloading"
+    downloaded = _ytdlp_download(task)
+    task["status"] = "moving"
+    task["result"] = _finalize(downloaded, task)
+    # 单音轨且开启自动分离:同一任务接续 Demucs 阶段,产出双音轨后才算 done。
+    if task["result"].get("audio_tracks") == 1 and AUTO_SEPARATE:
+        merged = _separate_and_merge(LIBRARY_DIR / task["result"]["filename"], task)
+        task["result"].update(merged)
+    task["progress"] = 100
+    task["status"] = "done"
+
+
+def _run_separate_task(task: dict):
+    merged = _separate_and_merge(LIBRARY_DIR / task["file"], task)
+    result = task.get("result") or {}
+    result.update(merged)
+    task["result"] = result
+    task["progress"] = 100
+    task["status"] = "done"
 
 
 threading.Thread(target=_worker, daemon=True).start()
@@ -229,6 +254,8 @@ def _ytdlp_download(task: dict) -> Path:
     def _feed(task: dict, proc) -> None:
         for line in proc.stdout:
             line = line.strip()
+            # 留最后 800 字符输出,失败时附在错误里(否则 yt-dlp 的报错无从排查)
+            task["_tail"] = ((task.get("_tail") or "") + "\n" + line)[-800:]
             if line.startswith("PROG"):
                 try:
                     task["progress"] = max(
@@ -257,7 +284,8 @@ def _ytdlp_download(task: dict) -> Path:
     code = proc.returncode
     files = [p for p in STAGING_DIR.iterdir() if p.is_file()]
     if code != 0 or not files:
-        raise RuntimeError(f"yt-dlp 退出码 {code},未产出文件")
+        tail = (task.get("_tail") or "").strip()[-400:]
+        raise RuntimeError(f"yt-dlp 退出码 {code},未产出文件。输出尾部: {tail}")
     return max(files, key=lambda p: p.stat().st_mtime)
 
 
@@ -326,11 +354,103 @@ def _probe_audio_tracks(file: Path) -> int:
 
 
 def _cleanup_staging():
-    for p in STAGING_DIR.glob("*") if STAGING_DIR.exists() else []:
+    """递归清空暂存区(分离阶段会产生子目录)。"""
+    if not STAGING_DIR.exists():
+        return
+    for p in STAGING_DIR.iterdir():
         try:
-            p.unlink()
+            if p.is_dir():
+                shutil.rmtree(p)
+            else:
+                p.unlink()
         except OSError:
             pass
+
+
+def _run_ffmpeg(args: list[str], timeout: int) -> None:
+    out = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=_clean_env())
+    if out.returncode != 0:
+        raise RuntimeError(f"ffmpeg 失败: {out.stderr[-400:]}")
+
+
+def _separate_and_merge(src: Path, task: dict) -> dict:
+    """Demucs 分离伴奏并合成双音轨 MKV:音轨1=原唱,音轨2=AI 伴奏。
+
+    幂等:已是双音轨的文件直接返回,不重复算(NAS 上一首 5-10 分钟,浪费不起)。
+    分离跑在独立子进程里(app/demucs_sep.py):torch 的 OOM/崩溃不连累本服务,
+    且带真实分段进度([sep]|NN → 40%~85%)。中间产物用完即删。
+    """
+    if not src.is_file():
+        raise RuntimeError(f"曲库中没有该文件: {src.name}")
+    if _probe_audio_tracks(src) >= 2:
+        return {"filename": src.name, "audio_tracks": 2, "skipped": True}
+
+    STAGING_DIR.mkdir(parents=True, exist_ok=True)
+    instrumental = STAGING_DIR / "instrumental.m4a"
+
+    task["status"] = "separating"
+    task["progress"] = 40
+    proc = subprocess.Popen(
+        [
+            sys.executable, "-m", "app.demucs_sep",
+            str(src), str(instrumental), DEMUCS_MODEL,
+        ],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        cwd="/srv", env=_clean_env(),
+    )
+    # 总超时看门狗:readline 会阻塞,首次运行还要下模型权重,靠 Timer 兜底。
+    timer = threading.Timer(SEPARATE_TIMEOUT, proc.kill)
+    timer.start()
+    for line in proc.stdout:
+        digits = line.strip().rsplit("|", 1)[-1]
+        if line.startswith("[sep]|") and digits.isdigit():
+            task["progress"] = 40 + int(digits) * 45 // 100
+    code = proc.wait()
+    timer.cancel()
+    if code != 0 or not instrumental.is_file():
+        err = (proc.stderr.read() or "")[-300:] if proc.stderr else ""
+        raise RuntimeError(f"Demucs 分离失败(退出码 {code}): {err}")
+
+    task["status"] = "merging"
+    task["progress"] = 90
+    merged = STAGING_DIR / "merged.mkv"
+    _run_ffmpeg(
+        [
+            "ffmpeg", "-y", "-i", str(src), "-i", str(instrumental),
+            "-map", "0:v?", "-map", "0:a:0", "-map", "1:a:0",
+            "-c:v", "copy", "-c:a:0", "aac", "-b:a", "192k", "-c:a:1", "copy",
+            "-disposition:a:0", "default", "-disposition:a:1", "none",
+            str(merged),
+        ],
+        900,
+    )
+
+    final = LIBRARY_DIR / f"{src.stem}.mkv"
+    src.unlink(missing_ok=True)
+    if final.exists():
+        final.unlink()
+    shutil.move(str(merged), str(final))
+    return {"filename": final.name, "audio_tracks": _probe_audio_tracks(final)}
+
+
+class SeparateBody(BaseModel):
+    filename: str
+
+
+@app.post("/separate")
+def separate(body: SeparateBody):
+    """对曲库内已有的单音轨文件补伴唱(junyao 传来的 filename 可能带 library1/ 前缀)。"""
+    fname = Path(str(body.filename).replace("\\", "/")).name  # 只取文件名,防目录穿越
+    src = LIBRARY_DIR / fname
+    if not src.is_file():
+        raise HTTPException(404, f"曲库中没有该文件: {fname}")
+    if _probe_audio_tracks(src) >= 2:
+        return {"task_id": None, "skipped": True}
+    artist, title = _guess_artist_title("", src.stem)
+    tid = _register(
+        {"kind": "separate", "file": fname, "artist": artist, "title": title or fname}
+    )
+    return {"task_id": tid}
 
 
 # ---------- 任务状态 ----------

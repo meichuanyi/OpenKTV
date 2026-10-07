@@ -397,13 +397,16 @@ function renderSongs(list){
     const favKey='fav_'+s.id;
     const isFaved=localStorage.getItem(favKey)==='1';
     c.innerHTML=`
-      <div class="info"><div class="title">${s.title}</div><div class="artist">${s.artist||''}</div></div>
+      <div class="info"><div class="title">${s.title}</div><div class="artist">${s.artist||''}${s.audio_tracks===1?' <span style="color:#666">· 单音轨</span>':''}</div></div>
       <div style="display:flex;gap:6px;align-items:center">
-        <button class="btn-fav${isFaved?' faved':''}">❤</button>
+        ${s.audio_tracks===1?'<button class="btn-fav sep-btn" title="AI生成伴奏(需几分钟)">🎛</button>':''}
+        <button class="btn-fav fav-btn${isFaved?' faved':''}">❤</button>
         <button class="btn-add">＋</button>
       </div>`;
     c.querySelector('.btn-add').onclick=()=>addSong(s.id, s.title);
-    c.querySelector('.btn-fav').onclick=()=>toggleFav(s.id, c.querySelector('.btn-fav'));
+    c.querySelector('.fav-btn').onclick=()=>toggleFav(s.id, c.querySelector('.fav-btn'));
+    const sepBtn=c.querySelector('.sep-btn');
+    if(sepBtn) sepBtn.onclick=()=>separateSong(s);
     el.appendChild(c);
   });
 }
@@ -411,6 +414,21 @@ async function addSong(id, title){
   const nick=nicknameInput.value.trim()||'匿名歌手';
   await fetch('/api/queue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({song_id:id,nickname:nick})});
   showToast(`《${title}》已加入队列 🎶`);
+}
+
+async function separateSong(s){
+  try{
+    const res=await fetch('/api/online/separate',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({filename:s.filename})
+    });
+    const d=await res.json();
+    if(!res.ok) throw new Error(d.error||res.status);
+    if(d.skipped){showToast('这首歌已是双音轨啦');return;}
+    showToast('已加入 AI 分离队列 🎛 完成后自动替换');
+    switchTabByName('online');
+    pollTasks();
+  }catch(e){showToast('失败:'+String(e.message||e));}
 }
 
 function getDevId(){
@@ -504,7 +522,7 @@ async function startDownload(item, btn){
     btn.disabled=false;btn.textContent='下载';
   }
 }
-// 把任务状态同步回对应卡片上的下载按钮:排队中 → 百分比 → 入库中 → 已入库✓/重试
+// 把任务状态同步回对应卡片上的下载按钮:排队中 → 百分比 → AI分离 → 已入库✓/重试
 function updateTaskButtons(tasks){
   tasks.forEach(t=>{
     const ref=taskBtns[t.id];
@@ -513,6 +531,9 @@ function updateTaskButtons(tasks){
     if(t.status==='queued'){b.textContent='排队中';}
     else if(t.status==='downloading'){b.textContent=(t.progress||0)+'%';}
     else if(t.status==='moving'){b.textContent='入库中';}
+    else if(t.status==='extracting'){b.textContent='提取音频';}
+    else if(t.status==='separating'){b.textContent='AI分离中';}
+    else if(t.status==='merging'){b.textContent='合成音轨';}
     else if(t.status==='done'){
       b.textContent='已入库✓';
       b.style.background='rgba(54,217,247,.35)';
@@ -546,7 +567,7 @@ function renderTasks(tasks){
   const wrap=document.getElementById('online-tasks');
   document.getElementById('tasks-h').style.display=tasks.length?'block':'none';
   wrap.innerHTML='';
-  const stMap={queued:'排队中',downloading:'下载中',moving:'入库中',done:'已完成',failed:'失败'};
+  const stMap={queued:'排队中',downloading:'下载中',moving:'入库中',extracting:'提取音频',separating:'AI分离中',merging:'合成双音轨',done:'已完成',failed:'失败'};
   tasks.slice(0,10).forEach(t=>{
     const row=document.createElement('div');
     row.className='task-row';

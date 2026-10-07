@@ -75,6 +75,27 @@ router.post('/download', async (req, res) => {
   }
 });
 
+// 对曲库内已有单音轨歌曲补 AI 伴唱(Demucs 分离 + 双音轨合成)。
+// 曲库接口里的 filename 形如 "library1/周杰伦 - 晴天.mp4",ktv-tools 的根
+// 目录就是曲库目录本身,这里剥掉 libraryN/ 前缀再转发。
+router.post('/separate', async (req, res) => {
+  const raw = String((req.body || {}).filename || '');
+  const rel = raw.replace(/^library[^/]+\//, '');
+  if (!rel) return res.status(400).json({ error: 'filename 必填' });
+  try {
+    const r = await toolsJSON('/separate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: rel }),
+    });
+    if (!r.body.skipped) log.info('ONLINE', `AI分离下单: ${rel}`);
+    res.status(r.status).json(r.body);
+  } catch (e) {
+    log.error('ONLINE', `分离下单失败: ${e.message}`);
+    res.status(502).json({ error: '工具服务不可达: ' + e.message });
+  }
+});
+
 // 任务列表/详情:进度、失败原因、入库文件名。
 router.get('/tasks', async (req, res) => {
   try {
