@@ -96,6 +96,24 @@ router.post('/separate', async (req, res) => {
   }
 });
 
+// 给已有双音轨 MV 补内嵌逐字歌词(取词→人声对齐→ASS烧录)。
+router.post('/lyricize', async (req, res) => {
+  const raw = String((req.body || {}).filename || '');
+  const rel = raw.replace(/^library[^/]+\//, '');
+  if (!rel) return res.status(400).json({ error: 'filename 必填' });
+  try {
+    const r = await toolsJSON('/lyricize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: rel }),
+    });
+    if (!r.body.skipped) log.info('ONLINE', `歌词内嵌下单: ${rel}`);
+    res.status(r.status).json(r.body);
+  } catch (e) {
+    res.status(502).json({ error: '工具服务不可达: ' + e.message });
+  }
+});
+
 // 任务列表/详情:进度、失败原因、入库文件名。
 router.get('/tasks', async (req, res) => {
   try {

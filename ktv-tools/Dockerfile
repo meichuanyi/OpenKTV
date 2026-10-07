@@ -10,6 +10,12 @@ FROM maiba:latest
 USER root
 ENV PATH="/app/.venv/bin:$PATH" VIRTUAL_ENV=/app/.venv
 
+# 系统 ffmpeg(带 libass 字幕滤镜,静态版没有)+ 中文字体(烧录逐字字幕用)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ffmpeg fontconfig fonts-noto-cjk \
+    && fc-cache -f >/dev/null 2>&1 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN uv pip install --python /app/.venv/bin/python \
       fastapi uvicorn python-multipart
 

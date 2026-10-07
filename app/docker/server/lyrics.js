@@ -61,8 +61,14 @@ module.exports = function createLyricsRouter({ db, log }) {
   }
 
   router.get('/:song_id', async (req, res) => {
-    const song = db.prepare('SELECT id,title,artist FROM songs WHERE id=?').get(req.params.song_id);
+    const song = db.prepare('SELECT id,title,artist,filename,filepath FROM songs WHERE id=?').get(req.params.song_id);
     if (!song) return res.status(404).json({ error: '歌曲不存在' });
+    // 已烧录逐字字幕的 MV:字幕在画面里,浮层让位(ktv-tools 烧录成功后写的标记)
+    try {
+      if (song.filepath && fs.existsSync(`${song.filepath}.ktv-ok`)) {
+        return res.json({ lyrics: null, burned: true, source: '已内嵌逐字字幕' });
+      }
+    } catch (_) { /* 检测失败继续走正常流程 */ }
     const cacheFile = path.join(CACHE_DIR, `${song.id}.json`);
     try {
       const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));

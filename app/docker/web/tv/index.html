@@ -1988,6 +1988,7 @@ fetch('/api/queue').then(r=>r.json()).then(d=>{queueData=d;renderAll();});
     try{
       const r=await fetch('/api/lyrics/'+my);const d=await r.json();
       if(reqId!==my)return;
+      if(d.burned){el.src.textContent='✅ 逐字字幕已内嵌MV';ov.classList.remove('hide');return;}
       if(d.lyrics&&d.lyrics.length){LINES=d.lyrics;el.src.dataset.s=d.source||'';setOff(off);}
     }catch(e){}
   };

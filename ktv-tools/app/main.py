@@ -20,6 +20,7 @@ from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 
 from . import bilibili
+from . import lyric_engine
 
 LIBRARY_DIR = Path(os.environ.get("LIBRARY_DIR", "/library"))
 STAGING_DIR = Path("/tmp/ktv-staging")
@@ -73,6 +74,8 @@ def _worker():
         try:
             if task.get("kind") == "separate":
                 _run_separate_task(task)
+            elif task.get("kind") == "lyricize":
+                _run_lyricize_task(task)
             else:
                 _run_download_task(task)
         except Exception as e:  # noqa: BLE001 —— 队列 worker 兜一切异常
@@ -91,6 +94,10 @@ def _run_download_task(task: dict):
     if task["result"].get("audio_tracks") == 1 and AUTO_SEPARATE:
         merged = _separate_and_merge(LIBRARY_DIR / task["result"]["filename"], task)
         task["result"].update(merged)
+    # 双音轨就绪后自动内嵌逐字歌词(取不到歌词就跳过,不算失败)
+    if task["result"].get("audio_tracks") == 2:
+        task["result"]["lyrics"] = _burn_lyrics(
+            LIBRARY_DIR / task["result"]["filename"], task)["lyrics"]
     task["progress"] = 100
     task["status"] = "done"
 
@@ -100,6 +107,18 @@ def _run_separate_task(task: dict):
     result = task.get("result") or {}
     result.update(merged)
     task["result"] = result
+    if result.get("audio_tracks") == 2:
+        result["lyrics"] = _burn_lyrics(LIBRARY_DIR / task["file"], task)["lyrics"]
+    task["progress"] = 100
+    task["status"] = "done"
+
+
+def _run_lyricize_task(task: dict):
+    src = LIBRARY_DIR / task["file"]
+    task["status"] = "lyrics"
+    task["progress"] = 10
+    info = _burn_lyrics(src, task)
+    task["result"] = {"filename": src.name, "audio_tracks": _probe_audio_tracks(src), **info}
     task["progress"] = 100
     task["status"] = "done"
 
@@ -431,6 +450,63 @@ def _separate_and_merge(src: Path, task: dict) -> dict:
         final.unlink()
     shutil.move(str(merged), str(final))
     return {"filename": final.name, "audio_tracks": _probe_audio_tracks(final)}
+
+
+def _burn_lyrics(file: Path, task: dict) -> dict:
+    """取词→人声对齐→ASS逐字→烧进视频(音轨无损copy)。成功后写 .ktv-ok 标记,
+    junyao 的歌词接口看到标记就让浮层让位(字幕已经在画面里了)。"""
+    try:
+        title = task.get("title") or file.stem
+        artist = task.get("artist") or ""
+        task["status"] = "lyrics"
+        task["progress"] = 92
+        got = lyric_engine.process(file, title, artist)
+        if not got:
+            return {"lyrics": "no-lyrics"}
+        ass_text, source = got
+        STAGING_DIR.mkdir(parents=True, exist_ok=True)
+        ass_path = STAGING_DIR / "lyric.ass"
+        ass_path.write_text(ass_text, encoding="utf-8")
+        out = STAGING_DIR / "burned.mkv"
+        # 用系统 ffmpeg(带 libass);静态 ffmpeg 无字幕滤镜。中文字体由镜像内置。
+        cmd = [
+            "/usr/bin/ffmpeg", "-y", "-v", "error",
+            "-i", str(file),
+            "-map", "0",  # 默认流选择只会留一条音轨,-map 0 保住双音轨
+            "-vf", f"ass={ass_path}",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-c:a", "copy",
+            "-max_muxing_queue_size", "4096",
+            str(out),
+        ]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, env=_clean_env())
+        if r.returncode != 0 or not out.is_file():
+            raise RuntimeError(f"烧录失败: {r.stderr[-300:]}")
+        shutil.move(str(out), str(file))  # 跨设备(/tmp→卷)不能用 rename/replace
+        (LIBRARY_DIR / f"{file.name}.ktv-ok").write_text(source, encoding="utf-8")
+        return {"lyrics": "burned", "lyric_source": source}
+    except Exception as e:  # 烧录失败不影响歌曲可用性
+        return {"lyrics": "failed", "lyric_error": str(e)[:200]}
+
+
+class LyricizeBody(BaseModel):
+    filename: str
+
+
+@app.post("/lyricize")
+def lyricize(body: LyricizeBody):
+    """给已有双音轨 MV 补内嵌逐字歌词(需先分离,对齐依赖原唱-伴奏的人声差)。"""
+    fname = Path(str(body.filename).replace("\\", "/")).name
+    src = LIBRARY_DIR / fname
+    if not src.is_file():
+        raise HTTPException(404, f"曲库中没有该文件: {fname}")
+    if _probe_audio_tracks(src) < 2:
+        raise HTTPException(400, "先补伴唱(双音轨)才能精准对齐歌词")
+    if (LIBRARY_DIR / f"{fname}.ktv-ok").exists():
+        return {"task_id": None, "skipped": True}
+    artist, title = _guess_artist_title("", src.stem)
+    tid = _register({"kind": "lyricize", "file": fname, "artist": artist, "title": title or fname})
+    return {"task_id": tid}
 
 
 class SeparateBody(BaseModel):
