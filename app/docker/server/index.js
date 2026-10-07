@@ -163,6 +163,9 @@ app.use('/api/online', require('./online'));
 // ---------- AI 点歌助手/推荐(Phase 3, 依赖广播与数据库) ----------
 app.use('/api/ai', require('./ai')({ db, broadcastQueue, log }));
 
+// ---------- MCP 服务(任意 MCP 客户端可点歌/管理MV, Phase 3) ----------
+app.use('/mcp', require('./mcp')({ db, broadcastQueue, log, scanLibrary, removeHLS }));
+
 // ---------- HLS 播放 (音轨切换不中断播放、进度可寻址) ----------
 // 取代了旧的"?track=0/1 现场 ffmpeg 重新封装"方案：那个方案吐出的新流没有
 // Content-Length/Range 支持，所以切音轨、以及切完音轨后拖进度条，都只能从
