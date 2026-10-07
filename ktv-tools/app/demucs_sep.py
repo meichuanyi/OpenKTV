@@ -7,7 +7,9 @@ ARM NAS 用 uv override 把 sphn 排掉了。这里照搬 maiba 的做法——f
 独立进程运行的另一个原因:torch 的崩溃/OOM 不该连累 uvicorn 主进程,
 一首歌失败可以整首重试,任务队列留在服务进程里不受影响。
 
-用法: python -m app.demucs_sep <源音频/视频> <输出伴奏.m4a> [模型名]
+用法: python -m app.demucs_sep <源> <输出伴奏.m4a> [模型名] [输出人声.m4a]
+人声轨输出是可选的:烧录歌词的对齐和将来的AI评分都要用真·人声stem,
+"双轨相减"会混入鼓点瞬态残留,短语检测全是伪影。
 进度: 每完成一个分段向 stdout 打印一行 "[sep]|<percent>"
 """
 
@@ -45,7 +47,8 @@ def encode_aac(samples, out_path: str) -> None:
     subprocess.run(cmd, input=interleaved.tobytes(), check=True)
 
 
-def separate(song_path: str, out_path: str, model_name: str = "htdemucs") -> float:
+def separate(song_path: str, out_path: str, model_name: str = "htdemucs",
+             out_vocals: str | None = None) -> float:
     """分离伴奏(no_vocals = 原混音 - 人声,stems 相加恒等于混音,精确无残差)。"""
     import torch
     from demucs.apply import apply_model
@@ -82,6 +85,8 @@ def separate(song_path: str, out_path: str, model_name: str = "htdemucs") -> flo
     vocals = separated[0, vocal_index].cpu()
     no_vocals = (origin[0] - vocals).clamp(-1, 1).numpy().astype("float32")
     encode_aac(no_vocals, out_path)
+    if out_vocals:
+        encode_aac(vocals.clamp(-1, 1).numpy().astype("float32"), out_vocals)
     return time.time() - started
 
 
@@ -91,8 +96,9 @@ def main() -> None:
         sys.exit(2)
     src, out = sys.argv[1], sys.argv[2]
     model = sys.argv[3] if len(sys.argv) > 3 else "htdemucs"
+    vocals = sys.argv[4] if len(sys.argv) > 4 else None
     try:
-        seconds = separate(src, out, model)
+        seconds = separate(src, out, model, vocals)
         print(f"{PROGRESS_PREFIX}100", flush=True)
         print(f"done in {seconds:.1f}s", file=sys.stderr)
     except Exception as e:  # noqa: BLE001 —— 子进程兜底,错误文本带回主进程

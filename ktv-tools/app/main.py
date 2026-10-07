@@ -113,8 +113,45 @@ def _run_separate_task(task: dict):
     task["status"] = "done"
 
 
+def _vocals_sidecar(file: Path) -> Path | None:
+    """真·人声stem旁车文件;没有则 None(烧录时退回相减法,质量打折)。"""
+    p = LIBRARY_DIR / f"{Path(file).stem}.vocals.m4a"
+    return p if p.is_file() else None
+
+
+def _ensure_vocals_stem(src: Path, task: dict) -> Path | None:
+    """给存量双音轨MV补人声stem:没有就跑一次 demucs(只取人声,不动曲库文件)。"""
+    existing = _vocals_sidecar(src)
+    if existing:
+        return existing
+    task["status"] = "separating"
+    task["progress"] = 40
+    out = LIBRARY_DIR / f"{src.stem}.vocals.m4a"
+    tmp = STAGING_DIR / "vocals.m4a"
+    STAGING_DIR.mkdir(parents=True, exist_ok=True)  # demucs 直接写这个路径,目录不存在会静默失败
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "app.demucs_sep", str(src),
+         str(STAGING_DIR / "instrumental.m4a"), DEMUCS_MODEL, str(tmp)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        cwd="/srv", env=_clean_env(),
+    )
+    timer = threading.Timer(SEPARATE_TIMEOUT, proc.kill)
+    timer.start()
+    for line in proc.stdout:
+        digits = line.strip().rsplit("|", 1)[-1]
+        if line.startswith("[sep]|") and digits.isdigit():
+            task["progress"] = 40 + int(digits) * 45 // 100
+    code = proc.wait()
+    timer.cancel()
+    if code != 0 or not tmp.is_file():
+        return None
+    shutil.move(str(tmp), str(out))
+    return out
+
+
 def _run_lyricize_task(task: dict):
     src = LIBRARY_DIR / task["file"]
+    _ensure_vocals_stem(src, task)
     task["status"] = "lyrics"
     task["progress"] = 10
     info = _burn_lyrics(src, task)
@@ -409,10 +446,12 @@ def _separate_and_merge(src: Path, task: dict) -> dict:
 
     task["status"] = "separating"
     task["progress"] = 40
+    vocals_sidecar = LIBRARY_DIR / f"{src.stem}.vocals.m4a"
     proc = subprocess.Popen(
         [
             sys.executable, "-m", "app.demucs_sep",
             str(src), str(instrumental), DEMUCS_MODEL,
+            *( [str(STAGING_DIR / "vocals.m4a")] if not vocals_sidecar.exists() else [] ),
         ],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         cwd="/srv", env=_clean_env(),
@@ -449,6 +488,9 @@ def _separate_and_merge(src: Path, task: dict) -> dict:
     if final.exists():
         final.unlink()
     shutil.move(str(merged), str(final))
+    staged_vocals = STAGING_DIR / "vocals.m4a"
+    if staged_vocals.is_file() and not vocals_sidecar.exists():
+        shutil.move(str(staged_vocals), str(vocals_sidecar))  # 歌词对齐/AI评分的人声参考
     return {"filename": final.name, "audio_tracks": _probe_audio_tracks(final)}
 
 
@@ -460,10 +502,10 @@ def _burn_lyrics(file: Path, task: dict) -> dict:
         artist = task.get("artist") or ""
         task["status"] = "lyrics"
         task["progress"] = 92
-        got = lyric_engine.process(file, title, artist)
+        got = lyric_engine.process(file, title, artist, vocals_path=_vocals_sidecar(file))
         if not got:
             return {"lyrics": "no-lyrics"}
-        ass_text, source = got
+        ass_text, source, fit_summary = got
         STAGING_DIR.mkdir(parents=True, exist_ok=True)
         ass_path = STAGING_DIR / "lyric.ass"
         ass_path.write_text(ass_text, encoding="utf-8")
@@ -484,7 +526,7 @@ def _burn_lyrics(file: Path, task: dict) -> dict:
             raise RuntimeError(f"烧录失败: {r.stderr[-300:]}")
         shutil.move(str(out), str(file))  # 跨设备(/tmp→卷)不能用 rename/replace
         (LIBRARY_DIR / f"{file.name}.ktv-ok").write_text(source, encoding="utf-8")
-        return {"lyrics": "burned", "lyric_source": source}
+        return {"lyrics": "burned", "lyric_source": source, "lyric_fit": fit_summary}
     except Exception as e:  # 烧录失败不影响歌曲可用性
         return {"lyrics": "failed", "lyric_error": str(e)[:200]}
 
