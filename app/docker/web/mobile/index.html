@@ -26,9 +26,9 @@ header{
   background:linear-gradient(90deg,var(--accent2),var(--accent));
   -webkit-background-clip:text;background-clip:text;color:transparent}
 /* Tab bar */
-.tabs{display:flex;margin-top:12px;gap:4px}
+.tabs{display:flex;margin-top:12px;gap:2px}
 .tab{
-  flex:1;text-align:center;padding:10px 0;font-size:13px;
+  flex:1;text-align:center;padding:10px 0;font-size:12px;white-space:nowrap;
   color:var(--sub);border-bottom:2px solid transparent;transition:.2s
 }
 .tab.active{color:#fff;border-bottom-color:var(--accent)}
@@ -229,6 +229,7 @@ header{
     <div class="tab" onclick="switchTab('remote',this)">🎮 遥控</div>
     <div class="tab" onclick="switchTab('online',this)">🌐 在线</div>
     <div class="tab" onclick="switchTab('ai',this)">🤖 助手</div>
+    <div class="tab" onclick="switchTab('tasks',this)">📥 任务</div>
   </div>
 </header>
 
@@ -331,9 +332,7 @@ header{
       <option value="1080">1080P 高清</option>
     </select>
   </div>
-  <div class="online-h" id="tasks-h" style="display:none;margin-top:14px">⬇ 下载任务</div>
-  <div id="online-tasks"></div>
-  <div id="online-list"></div>
+  <div id="online-list" style="margin-top:12px"></div>
 </div>
 
 <!-- ====== AI ASSISTANT TAB ====== -->
@@ -357,6 +356,12 @@ header{
   </div>
 </div>
 
+<!-- ====== TASKS TAB ====== -->
+<div id="tab-tasks" style="display:none">
+  <div class="online-h" style="margin:14px 16px 10px">⬇ 下载 / AI 分离任务</div>
+  <div id="online-tasks"></div>
+</div>
+
 <div id="queue-fab" onclick="switchTabByName('queue')">
   🎵 当前队列 <span class="fab-badge" id="fab-badge">0</span>
 </div>
@@ -377,12 +382,14 @@ function switchTab(name, el){
   document.getElementById('tab-remote').style.display = name==='remote' ? 'block' : 'none';
   document.getElementById('tab-online').style.display = name==='online' ? 'block' : 'none';
   document.getElementById('tab-ai').style.display = name==='ai' ? 'block' : 'none';
+  document.getElementById('tab-tasks').style.display = name==='tasks' ? 'block' : 'none';
   if(name==='queue') renderQueue();
   if(name==='ai' && !aiRecoLoaded) loadReco();
+  if(name==='tasks') pollTasks();
 }
 function switchTabByName(name){
   const tabs=document.querySelectorAll('.tab');
-  const idx={'search':0,'queue':1,'remote':2,'online':3,'ai':4}[name]||0;
+  const idx={'search':0,'queue':1,'remote':2,'online':3,'ai':4,'tasks':5}[name]||0;
   switchTab(name, tabs[idx]);
 }
 
@@ -708,8 +715,11 @@ function pollTasks(){
 }
 function renderTasks(tasks){
   const wrap=document.getElementById('online-tasks');
-  document.getElementById('tasks-h').style.display=tasks.length?'block':'none';
   wrap.innerHTML='';
+  if(!tasks.length){
+    wrap.innerHTML='<div style="color:#555;text-align:center;padding:40px 0;font-size:13px">暂无任务,去「在线」Tab 搜歌下载吧</div>';
+    return;
+  }
   const stMap={queued:'排队中',downloading:'下载中',moving:'入库中',extracting:'提取音频',separating:'AI分离中',merging:'合成双音轨',done:'已完成',failed:'失败'};
   tasks.slice(0,10).forEach(t=>{
     const row=document.createElement('div');
