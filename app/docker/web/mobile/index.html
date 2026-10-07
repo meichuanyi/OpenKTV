@@ -135,6 +135,43 @@ header{
 }
 .fab-badge{background:rgba(0,0,0,.3);border-radius:999px;padding:1px 7px;font-size:12px}
 
+/* ===== ONLINE TAB ===== */
+#tab-online .search-box{
+  margin:14px 16px 0;display:flex;align-items:center;gap:8px;
+  background:rgba(255,255,255,.07);border-radius:14px;padding:11px 14px;
+  border:1px solid rgba(255,255,255,.08)}
+#tab-online .search-box input{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:15px}
+.online-bar{display:flex;gap:10px;margin:10px 16px 0;align-items:center}
+.seg{display:flex;background:rgba(255,255,255,.06);border-radius:10px;padding:3px;gap:2px}
+.seg button{border:none;background:transparent;color:var(--sub);font-size:12px;padding:6px 14px;border-radius:8px}
+.seg button.on{background:rgba(199,54,247,.35);color:#fff}
+.quality-sel{
+  background:rgba(255,255,255,.06);color:var(--text);border:1px solid rgba(255,255,255,.1);
+  border-radius:10px;padding:7px 10px;font-size:12px;outline:none}
+.o-card{
+  display:flex;gap:10px;background:var(--card);border:1px solid rgba(255,255,255,.06);
+  padding:10px;border-radius:14px;margin:0 16px 10px;align-items:center}
+.o-card img{width:84px;height:53px;object-fit:cover;border-radius:8px;background:#222;flex-shrink:0}
+.o-card .info{flex:1;min-width:0}
+.o-card .title{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.o-card .meta{font-size:11px;color:var(--sub);margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.o-src{font-size:10px;padding:1px 6px;border-radius:6px;background:rgba(54,217,247,.15);color:var(--accent2);flex-shrink:0}
+.btn-dl{
+  border:none;border-radius:10px;padding:8px 12px;font-size:12px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.btn-dl:disabled{opacity:.45}
+.task-row{
+  display:flex;align-items:center;gap:10px;background:var(--card);
+  border:1px solid rgba(255,255,255,.05);border-radius:12px;padding:11px 12px;margin:0 16px 10px}
+.task-row .info{flex:1;min-width:0}
+.task-row .t-title{font-size:13px;font-weight:600}
+.task-row .t-sub{font-size:11px;color:var(--sub);margin-top:3px}
+.task-row .t-sub.err{color:var(--pink)}
+.bar{height:4px;border-radius:4px;background:rgba(255,255,255,.08);margin-top:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:.3s}
+.online-h{font-size:12px;color:var(--sub);letter-spacing:1px;margin:16px 16px 10px}
+
 /* ===== TOAST ===== */
 #toast{
   position:fixed;left:50%;top:16px;transform:translateX(-50%) translateY(-70px);
@@ -151,6 +188,7 @@ header{
     <div class="tab active" onclick="switchTab('search',this)">🎵 点歌</div>
     <div class="tab" onclick="switchTab('queue',this)">📋 队列</div>
     <div class="tab" onclick="switchTab('remote',this)">🎮 遥控</div>
+    <div class="tab" onclick="switchTab('online',this)">🌐 在线</div>
   </div>
 </header>
 
@@ -236,6 +274,28 @@ header{
 
 </div>
 
+<!-- ====== ONLINE TAB ====== -->
+<div id="tab-online" style="display:none">
+  <div class="search-box">
+    <span>🔍</span>
+    <input id="online-input" placeholder="搜 B站 / YouTube 上的 MV">
+  </div>
+  <div class="online-bar">
+    <div class="seg">
+      <button id="seg-bili" class="on" onclick="setOnlineSource('bilibili')">B站</button>
+      <button id="seg-yt" onclick="setOnlineSource('youtube')">YouTube</button>
+    </div>
+    <select id="quality-sel" class="quality-sel">
+      <option value="480">480P 省空间</option>
+      <option value="720" selected>720P 推荐</option>
+      <option value="1080">1080P 高清</option>
+    </select>
+  </div>
+  <div id="online-list" style="margin-top:12px"></div>
+  <div class="online-h" id="tasks-h" style="display:none">⬇ 下载任务</div>
+  <div id="online-tasks"></div>
+</div>
+
 <div id="queue-fab" onclick="switchTabByName('queue')">
   🎵 当前队列 <span class="fab-badge" id="fab-badge">0</span>
 </div>
@@ -254,11 +314,12 @@ function switchTab(name, el){
   document.getElementById('tab-search').style.display = name==='search' ? 'block' : 'none';
   document.getElementById('tab-queue').style.display = name==='queue' ? 'block' : 'none';
   document.getElementById('tab-remote').style.display = name==='remote' ? 'block' : 'none';
+  document.getElementById('tab-online').style.display = name==='online' ? 'block' : 'none';
   if(name==='queue') renderQueue();
 }
 function switchTabByName(name){
   const tabs=document.querySelectorAll('.tab');
-  const idx={'search':0,'queue':1,'remote':2}[name]||0;
+  const idx={'search':0,'queue':1,'remote':2,'online':3}[name]||0;
   switchTab(name, tabs[idx]);
 }
 
@@ -372,6 +433,119 @@ function showToast(msg){
   const t=document.getElementById('toast');
   t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1600);
 }
+
+// ===== 在线搜索 & 下载(代理 ktv-tools) =====
+let onlineSource='bilibili', onlineTimer, tasksTimer, lastDoneTitles={};
+const onlineInput=document.getElementById('online-input');
+
+function setOnlineSource(s){
+  onlineSource=s;
+  document.getElementById('seg-bili').classList.toggle('on',s==='bilibili');
+  document.getElementById('seg-yt').classList.toggle('on',s==='youtube');
+  if(onlineInput.value.trim()) onlineSearch();
+}
+onlineInput.addEventListener('input',()=>{
+  clearTimeout(onlineTimer);
+  onlineTimer=setTimeout(()=>onlineSearch(),400);
+});
+async function onlineSearch(){
+  const q=onlineInput.value.trim();
+  if(!q){document.getElementById('online-list').innerHTML='';return;}
+  const el=document.getElementById('online-list');
+  el.innerHTML='<div style="color:#555;text-align:center;padding:26px;font-size:13px">搜索中…</div>';
+  const source = onlineSource==='youtube' ? 'youtube' : 'bilibili';
+  try{
+    const res=await fetch(`/api/online/search?q=${encodeURIComponent(q)}&source=${source}`);
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error||res.status);
+    renderOnline(data.results||[], source);
+  }catch(e){
+    el.innerHTML=`<div style="color:#888;text-align:center;padding:26px;font-size:13px">搜索失败:${escHtml(String(e.message||e))}</div>`;
+  }
+}
+function renderOnline(list, source){
+  const el=document.getElementById('online-list');
+  if(!list.length){el.innerHTML='<div style="color:#555;text-align:center;padding:26px;font-size:13px">没有结果,换个关键词或切到另一个源</div>';return;}
+  el.innerHTML='';
+  list.forEach(item=>{
+    const c=document.createElement('div');
+    c.className='o-card';
+    c.innerHTML=`
+      <img src="/api/online/thumbnail?url=${encodeURIComponent(item.thumbnail||'')}" alt="" onerror="this.style.visibility='hidden'">
+      <div class="info">
+        <div class="title">${escHtml(item.title)}</div>
+        <div class="meta">
+          <span class="o-src">${item.source==='youtube'?'YT':'B站'}</span>
+          <span>${escHtml(item.channel||'')}</span>
+          <span>${escHtml(item.duration||'')}</span>
+        </div>
+      </div>
+      <button class="btn-dl">下载</button>`;
+    c.querySelector('.btn-dl').onclick=()=>startDownload(item, c.querySelector('.btn-dl'));
+    el.appendChild(c);
+  });
+}
+async function startDownload(item, btn){
+  btn.disabled=true;btn.textContent='已加入';
+  const quality=document.getElementById('quality-sel').value;
+  try{
+    const res=await fetch('/api/online/download',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url:item.url,title:item.title,artist:'',quality})
+    });
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error||res.status);
+    showToast('已加入下载队列 ⬇');
+    pollTasks();
+  }catch(e){
+    showToast('下载失败:'+String(e.message||e));
+    btn.disabled=false;btn.textContent='下载';
+  }
+}
+function pollTasks(){
+  if(tasksTimer) return;
+  tasksTimer=setInterval(async ()=>{
+    try{
+      const res=await fetch('/api/online/tasks');
+      const tasks=await res.json();
+      renderTasks(tasks);
+      const active=tasks.some(t=>['queued','downloading','moving'].includes(t.status));
+      const finishedNow=tasks.find(t=>t.status==='done'&&t.result&&!lastDoneTitles[t.id]);
+      if(finishedNow){
+        lastDoneTitles[finishedNow.id]=true;
+        showToast(`《${finishedNow.artist||''} ${finishedNow.title}》已入库 🎶`);
+        fetch('/api/scan',{method:'POST'});
+        loadSongs(finishedNow.title);
+      }
+      if(!active){clearInterval(tasksTimer);tasksTimer=null;}
+    }catch(e){/* 工具服务暂不可达,下轮再试 */}
+  },2000);
+}
+function renderTasks(tasks){
+  const wrap=document.getElementById('online-tasks');
+  document.getElementById('tasks-h').style.display=tasks.length?'block':'none';
+  wrap.innerHTML='';
+  const stMap={queued:'排队中',downloading:'下载中',moving:'入库中',done:'已完成',failed:'失败'};
+  tasks.slice(0,10).forEach(t=>{
+    const row=document.createElement('div');
+    row.className='task-row';
+    const pct=t.status==='done'?100:Math.max(2,t.progress||0);
+    row.innerHTML=`
+      <div class="info">
+        <div class="t-title">${escHtml((t.artist?t.artist+' - ':'')+t.title)}</div>
+        <div class="t-sub${t.status==='failed'?' err':''}">${
+          t.status==='failed' ? escHtml(t.error||'失败') :
+          t.status==='done' ? escHtml(t.result?.filename||stMap[t.status]) : (stMap[t.status]||t.status)+' '+pct+'%'
+        }</div>
+        <div class="bar"><i style="width:${pct}%"></i></div>
+      </div>`;
+    wrap.appendChild(row);
+  });
+}
+function escHtml(s){
+  return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+pollTasks();
 
 loadSongs();
 fetch('/api/queue').then(r=>r.json()).then(d=>{queueData=d;onQueue();});

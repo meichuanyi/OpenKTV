@@ -157,6 +157,9 @@ app.use('/m',     express.static(path.join(__dirname, '../web/mobile')));
 app.use('/admin', express.static(path.join(__dirname, '../web/admin')));
 app.use('/cover', express.static('/data/covers'));
 
+// ---------- 在线搜索/下载(代理 ktv-tools 服务, feature/online-fusion) ----------
+app.use('/api/online', require('./online'));
+
 // ---------- HLS 播放 (音轨切换不中断播放、进度可寻址) ----------
 // 取代了旧的"?track=0/1 现场 ffmpeg 重新封装"方案：那个方案吐出的新流没有
 // Content-Length/Range 支持，所以切音轨、以及切完音轨后拖进度条，都只能从
