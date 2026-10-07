@@ -19,6 +19,9 @@ services:
       - VAAPI_DEVICE=/dev/dri/renderD128   # 无核显删掉此行与下方 devices
       - HLS_CACHE_MAX_AGE_DAYS=3
       - TOOLS_URL=http://ktv-tools:9000
+      - AI_BASE_URL=http://YOUR-LLM-HOST:4000/v1   # OpenAI兼容接口(litellm/ollama/new-api均可),不配则AI功能返回503
+      - AI_API_KEY=sk-your-key
+      - AI_MODEL=glm-5.3-flash
     volumes:
       - /vol1/1000/docker/junyao-ktv/data:/data
       - /vol2/1000/ktv/mv:/mv/library1

@@ -172,6 +172,45 @@ header{
 .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:.3s}
 .online-h{font-size:12px;color:var(--sub);letter-spacing:1px;margin:16px 16px 10px}
 
+/* ===== AI ASSISTANT TAB ===== */
+#tab-ai{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.ai-reco{background:var(--card);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:12px}
+.ai-reco .h{font-size:12px;color:var(--sub);margin-bottom:8px}
+.ai-reco .row{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.reco-pill{
+  flex-shrink:0;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+  border-radius:12px;padding:8px 10px;display:flex;align-items:center;gap:8px;max-width:75%}
+.reco-pill .info{min-width:0}
+.reco-pill .t{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reco-pill .a{font-size:10px;color:var(--sub);white-space:nowrap}
+.reco-pill button{
+  border:none;border-radius:8px;padding:6px 8px;font-size:12px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+#ai-chat{display:flex;flex-direction:column;gap:10px;min-height:120px}
+.ai-msg{max-width:85%;padding:10px 13px;border-radius:14px;font-size:13px;line-height:1.5}
+.ai-msg.bot{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.08);border-top-left-radius:4px}
+.ai-msg.user{background:rgba(199,54,247,.25);border:1px solid rgba(199,54,247,.3);align-self:flex-end;border-top-right-radius:4px}
+.ai-songs{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.ai-song{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  background:rgba(255,255,255,.05);border-radius:10px;padding:7px 10px;font-size:12px}
+.ai-song .st{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ai-song .ok{color:var(--accent2);flex-shrink:0}
+.ai-song.missing{opacity:.6}
+.ai-song.missing .go{color:var(--orange);flex-shrink:0;cursor:pointer}
+.ai-chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:var(--sub);
+  border-radius:999px;padding:7px 13px;font-size:12px}
+.chip:active{background:rgba(199,54,247,.25);color:#fff}
+.ai-input-row{display:flex;gap:8px;position:sticky;bottom:70px}
+.ai-input-row input{
+  flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);
+  border-radius:14px;padding:12px 14px;color:var(--text);font-size:14px;outline:none}
+.ai-input-row button{
+  border:none;border-radius:14px;padding:0 18px;font-size:15px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.ai-input-row button:disabled{opacity:.5}
+.typing{color:var(--sub);font-size:12px;padding:4px 2px}
+
 /* ===== TOAST ===== */
 #toast{
   position:fixed;left:50%;top:16px;transform:translateX(-50%) translateY(-70px);
@@ -189,6 +228,7 @@ header{
     <div class="tab" onclick="switchTab('queue',this)">📋 队列</div>
     <div class="tab" onclick="switchTab('remote',this)">🎮 遥控</div>
     <div class="tab" onclick="switchTab('online',this)">🌐 在线</div>
+    <div class="tab" onclick="switchTab('ai',this)">🤖 助手</div>
   </div>
 </header>
 
@@ -296,6 +336,27 @@ header{
   <div id="online-list"></div>
 </div>
 
+<!-- ====== AI ASSISTANT TAB ====== -->
+<div id="tab-ai" style="display:none">
+  <div class="ai-reco">
+    <div class="h">✨ 为你推荐</div>
+    <div class="row" id="ai-reco-row"><span class="typing">加载中…</span></div>
+  </div>
+  <div id="ai-chat">
+    <div class="ai-msg bot">你好呀!跟我说句想唱的感觉,我来帮你点歌 🎤<br>比如「来首适合现在的粤语歌」</div>
+  </div>
+  <div class="ai-chips">
+    <button class="chip" onclick="aiQuick(this)">来点怀旧金曲</button>
+    <button class="chip" onclick="aiQuick(this)">来首粤语伤感</button>
+    <button class="chip" onclick="aiQuick(this)">气氛热起来!</button>
+    <button class="chip" onclick="aiQuick(this)">点首小众好歌</button>
+  </div>
+  <div class="ai-input-row">
+    <input id="ai-input" placeholder="想唱什么,说一句…">
+    <button id="ai-send" onclick="aiSend()">🎵</button>
+  </div>
+</div>
+
 <div id="queue-fab" onclick="switchTabByName('queue')">
   🎵 当前队列 <span class="fab-badge" id="fab-badge">0</span>
 </div>
@@ -315,11 +376,13 @@ function switchTab(name, el){
   document.getElementById('tab-queue').style.display = name==='queue' ? 'block' : 'none';
   document.getElementById('tab-remote').style.display = name==='remote' ? 'block' : 'none';
   document.getElementById('tab-online').style.display = name==='online' ? 'block' : 'none';
+  document.getElementById('tab-ai').style.display = name==='ai' ? 'block' : 'none';
   if(name==='queue') renderQueue();
+  if(name==='ai' && !aiRecoLoaded) loadReco();
 }
 function switchTabByName(name){
   const tabs=document.querySelectorAll('.tab');
-  const idx={'search':0,'queue':1,'remote':2,'online':3}[name]||0;
+  const idx={'search':0,'queue':1,'remote':2,'online':3,'ai':4}[name]||0;
   switchTab(name, tabs[idx]);
 }
 
@@ -429,6 +492,86 @@ async function separateSong(s){
     switchTabByName('online');
     pollTasks();
   }catch(e){showToast('失败:'+String(e.message||e));}
+}
+
+// ===== AI 点歌助手(Phase 3a/3b) =====
+let aiRecoLoaded=false, aiBusy=false;
+const aiChat=document.getElementById('ai-chat');
+
+function aiBubble(text, who){
+  const d=document.createElement('div');
+  d.className='ai-msg '+who;
+  d.textContent=text;
+  aiChat.appendChild(d);
+  d.scrollIntoView({behavior:'smooth',block:'end'});
+  return d;
+}
+let aiMissing=[];
+function aiSongsBlock(added, missing){
+  const d=document.createElement('div');
+  d.className='ai-msg bot';
+  const base=aiMissing.length;
+  (missing||[]).forEach(s=>aiMissing.push(s));
+  let html='<div class="ai-songs">';
+  (added||[]).forEach(s=>{html+=`<div class="ai-song"><span class="st">🎤 ${escHtml(s.artist)} - ${escHtml(s.title)}</span><span class="ok">已入队✓</span></div>`;});
+  (missing||[]).forEach((s,i)=>{html+=`<div class="ai-song missing"><span class="st">${escHtml(s.artist)} - ${escHtml(s.title)}</span><span class="go" data-i="${base+i}">在线搜→</span></div>`;});
+  html+='</div>';
+  d.innerHTML=html;
+  d.querySelectorAll('.go').forEach(el=>el.onclick=()=>{
+    const s=aiMissing[Number(el.dataset.i)]||{};
+    onlineInput.value=((s.artist||'')+' '+(s.title||'')).trim();
+    switchTabByName('online');
+    onlineSearch();
+  });
+}
+async function aiSend(){
+  if(aiBusy) return;
+  const input=document.getElementById('ai-input');
+  const prompt=input.value.trim();
+  if(!prompt) return;
+  input.value='';aiBusy=true;
+  document.getElementById('ai-send').disabled=true;
+  aiBubble(prompt,'user');
+  const typing=aiBubble('正在想歌…','bot');
+  try{
+    const res=await fetch('/api/ai/request',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prompt,nickname:nicknameInput.value.trim()||'AI助手'})
+    });
+    const d=await res.json();
+    typing.remove();
+    if(!res.ok) throw new Error(d.error||res.status);
+    aiBubble(d.reply||'点好啦!','bot');
+    if((d.added&&d.added.length)||(d.missing&&d.missing.length)) aiSongsBlock(d.added,d.missing);
+  }catch(e){
+    typing.remove();
+    aiBubble('出了点小状况:'+String(e.message||e),'bot');
+  }
+  aiBusy=false;
+  document.getElementById('ai-send').disabled=false;
+}
+document.getElementById('ai-input').addEventListener('keydown',e=>{if(e.key==='Enter')aiSend();});
+function aiQuick(btn){ document.getElementById('ai-input').value=btn.textContent; aiSend(); }
+async function loadReco(){
+  aiRecoLoaded=true;
+  const row=document.getElementById('ai-reco-row');
+  try{
+    const res=await fetch('/api/ai/recommend');
+    const d=await res.json();
+    if(!res.ok) throw new Error(d.error||res.status);
+    row.innerHTML='';
+    if(d.reply){aiBubble('✨ '+d.reply,'bot');}
+    if(!d.songs||!d.songs.length){row.innerHTML='<span class="typing">'+escHtml(d.reply||'曲库歌曲再多些再来推荐吧')+'</span>';return;}
+    d.songs.forEach(s=>{
+      const p=document.createElement('div');
+      p.className='reco-pill';
+      p.innerHTML=`<div class="info"><div class="t">${escHtml(s.title)}</div><div class="a">${escHtml(s.artist||'')}</div></div><button>＋点</button>`;
+      p.querySelector('button').onclick=()=>{addSong(s.id,s.title);p.querySelector('button').textContent='已点✓';};
+      row.appendChild(p);
+    });
+  }catch(e){
+    row.innerHTML='<span class="typing">推荐服务暂不可用</span>';
+  }
 }
 
 function getDevId(){
