@@ -1,4 +1,4 @@
-# open-ktv · 开源 AI 家庭 KTV
+# OpenKTV · 开源 AI 家庭 KTV
 
 基于开源项目 [junyao-ktv(骏耀K歌)](https://github.com/ma303973022/junyao-ktv) 二次开发、
 融合 [maiba-ktv(麦霸)](https://github.com/xieweicong/maiba-ktv) 能力的家庭 KTV 系统。
@@ -26,14 +26,14 @@
 ## 快速开始
 
 ```bash
-git clone https://github.com/meichuanyi/open-ktv.git && cd open-ktv
+git clone https://github.com/meichuanyi/OpenKTV.git && cd OpenKTV
 
 # 1. 主服务镜像
-docker build -t junyao-ktv:fused app/docker
+docker build -t openktv:server app/docker
 
 # 2. 工具服务镜像(需先构建 maiba 基础镜像,见其仓库;
 #    注意其 Dockerfile 缺一行 COPY README.md,需补上再构建)
-docker build -t ktv-tools:latest ktv-tools
+docker build -t openktv:tools ktv-tools
 
 # 3. 按 deploy/docker-compose.yml 修改路径/密码/AI配置后启动
 cd deploy && docker compose up -d
@@ -55,12 +55,12 @@ cd deploy && docker compose up -d
 ### 接入 MCP 客户端(如 Claude)
 
 ```bash
-claude mcp add --transport http open-ktv http://NAS_IP:8083/mcp
+claude mcp add --transport http openktv http://NAS_IP:8083/mcp
 # 设置了 MCP_TOKEN 环境变量时,加 --header "Authorization: Bearer <token>"
 ```
 
 之后就可以对 Claude 说:"帮我把《晴天》顶到队列第一首"、"搜一下林俊杰的江南下载下来"、
-"曲库里把《青花瓷》的歌手改成周杰伦"——它会调用 open-ktv 的 MCP 工具完成操作。
+"曲库里把《青花瓷》的歌手改成周杰伦"——它会调用 OpenKTV 的 MCP 工具完成操作。
 
 ## 架构
 

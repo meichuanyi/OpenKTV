@@ -1,12 +1,12 @@
 # ktv-fusion 完整栈部署样例(飞牛/群晖/任意 Docker 主机通用)
 # 用法:
 #   1. 按需改下方路径与密码
-#   2. junyao-ktv 镜像: 在仓库根 docker build -t junyao-ktv:fused app/docker
-#      ktv-tools  镜像: 先构建 maiba 基础镜像(见 README),再 docker build -t ktv-tools:latest ktv-tools
+#   2. 主服务镜像:   在仓库根 docker build -t openktv:server app/docker
+#      工具服务镜像: 先构建 maiba 基础镜像(见 README),再 docker build -t openktv:tools ktv-tools
 #   3. docker compose up -d
 services:
   junyao-ktv:
-    image: junyao-ktv:fused
+    image: openktv:server
     container_name: junyao-ktv
     restart: unless-stopped
     ports:
@@ -32,7 +32,7 @@ services:
       - ktv-tools
 
   ktv-tools:
-    image: ktv-tools:latest
+    image: openktv:tools
     container_name: ktv-tools
     user: "1000:1001"                      # 与曲库目录属主一致,避免 root 落盘
     restart: unless-stopped

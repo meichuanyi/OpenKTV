@@ -9,13 +9,13 @@
 //   Authorization: Bearer <token>  才能调用。
 //
 // 客户端接入示例(Claude Desktop / claude mcp):
-//   claude mcp add --transport http open-ktv http://NAS_IP:8083/mcp
+//   claude mcp add --transport http openktv http://NAS_IP:8083/mcp
 //   (设置了 MCP_TOKEN 时加 --header "Authorization: Bearer <token>")
 
 const express = require('express');
 
 const PROTOCOL_VERSION = '2024-11-05';
-const SERVER_INFO = { name: 'open-ktv', version: '1.0.0' };
+const SERVER_INFO = { name: 'OpenKTV', version: '1.0.0' };
 
 const TOOLS = [
   {
