@@ -183,8 +183,13 @@ def search(q: str, source: str = "auto", limit: int = 20):
     if source in ("auto", "bilibili"):
         try:
             hits, _ = bilibili.search(q, limit=limit)
-            if hits or source == "bilibili":
-                return {"source": "bilibili", "results": hits}
+            # 调研结论:B站有专司KTV素材的UP主(经典800首双音轨合集/KTV必点200首/
+            # 港台版修复等),但它们未必出现在普通关键词的首页。没有KTV版命中时,
+            # 自动用 "q KTV" 二搜一轮,把KTV版合并到结果顶部(前端会再按ktv标排序)。
+            if source == "bilibili":
+                return {"source": "bilibili", "results": _merge_ktv_second_pass(q, hits, limit)}
+            if hits:
+                return {"source": "bilibili", "results": _merge_ktv_second_pass(q, hits, limit)}
         except bilibili.BilibiliUnavailable as e:
             bili_err = str(e)
     yt = _youtube_search(q, limit)
@@ -193,6 +198,32 @@ def search(q: str, source: str = "auto", limit: int = 20):
     if bili_err:
         raise HTTPException(502, f"B站搜索失败: {bili_err},YouTube 也没有结果")
     return {"source": source, "results": []}
+
+
+def _ktv_plausible(item: dict) -> bool:
+    """KTV二搜结果的准入:必须带KTV标记,且是单曲时长(3-9分钟),滤掉合集/教学。
+    纯伴奏版(无人声)也排除:分离无从谈起,做不出原唱/伴唱双轨。"""
+    if not item.get("ktv"):
+        return False
+    if re.search(r"伴奏版|纯伴奏|纯音乐|instrumental", item.get("title") or "", re.I):
+        return False
+    dur = item.get("duration") or ""
+    parts = [int(x) for x in dur.split(":") if x.isdigit()]
+    secs = parts[0] * 60 + parts[1] if len(parts) == 2 else (
+        parts[0] * 3600 + parts[1] * 60 + parts[2] if len(parts) == 3 else 0)
+    return 150 <= secs <= 560
+
+
+def _merge_ktv_second_pass(q: str, hits: list[dict], limit: int) -> list[dict]:
+    if any(h.get("ktv") for h in hits):
+        return hits
+    try:
+        extra, _ = bilibili.search(f"{q} KTV", limit=8)
+    except bilibili.BilibiliUnavailable:
+        return hits
+    keep = [e for e in extra if _ktv_plausible(e) and e["video_id"] not in
+            {h["video_id"] for h in hits}][:5]
+    return keep + hits if keep else hits
 
 
 def _youtube_search(q: str, limit: int) -> list[dict]:
