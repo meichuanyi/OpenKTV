@@ -32,6 +32,9 @@ _PROXY_DOMAINS = ("youtube.com", "youtu.be", "googlevideo.com")
 DEMUCS_MODEL = os.environ.get("DEMUCS_MODEL", "htdemucs")
 SEPARATE_TIMEOUT = int(os.environ.get("SEPARATE_TIMEOUT", "1800"))
 AUTO_SEPARATE = os.environ.get("AUTO_SEPARATE", "1") == "1"
+# 自动烧录歌词开关:烧进画面后播放时无法关闭,不想字幕就关掉这个,
+# 电视浮层歌词(可隐藏/可校准)会自动接管。手动 /lyricize 不受此开关限制。
+AUTO_LYRICS = os.environ.get("AUTO_LYRICS", "1") == "1"
 
 
 def _proxy_args(url: str) -> list[str]:
@@ -95,7 +98,9 @@ def _run_download_task(task: dict):
         merged = _separate_and_merge(LIBRARY_DIR / task["result"]["filename"], task)
         task["result"].update(merged)
     final_path = LIBRARY_DIR / task["result"]["filename"]
-    if task.get("ktv_source"):
+    if not AUTO_LYRICS:
+        task["result"]["lyrics"] = "off"  # 全局开关关闭,浮层歌词接管
+    elif task.get("ktv_source"):
         # KTV版素材自带专业字幕(通常还自带双音轨),不需要 AI 烧录
         (LIBRARY_DIR / f"{final_path.name}.ktv-ok").write_text("KTV版素材自带字幕", encoding="utf-8")
         task["result"]["lyrics"] = "native-ktv"
@@ -110,7 +115,7 @@ def _run_separate_task(task: dict):
     result = task.get("result") or {}
     result.update(merged)
     task["result"] = result
-    if result.get("audio_tracks") == 2:
+    if AUTO_LYRICS and result.get("audio_tracks") == 2:
         result.update(_burn_lyrics(LIBRARY_DIR / task["file"], task))
     task["progress"] = 100
     task["status"] = "done"

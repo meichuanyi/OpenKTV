@@ -41,6 +41,7 @@ services:
       - OMP_NUM_THREADS=2                  # Demucs 分离线程数,建议 CPU 核数一半
       - YTDLP_PROXY=http://192.168.6.100:7890  # 仅 YouTube 走代理,B站直连;没有可留空
       - SEPARATE_TIMEOUT=1800              # 单首分离限时(秒)
+      - AUTO_LYRICS=1                      # 自动烧录逐字歌词进MV:1开/0关(关了用电视浮层歌词)
     volumes:
       - /vol2/1000/ktv/mv:/library         # 与 junyao 的曲库目录指向同一宿主机目录
     deploy:

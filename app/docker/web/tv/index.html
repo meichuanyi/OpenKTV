@@ -1981,14 +1981,21 @@ fetch('/api/queue').then(r=>r.json()).then(d=>{queueData=d;renderAll();});
   function setOff(v){off=v;localStorage.setItem('ly_off',v);el.src.textContent=(el.src.dataset.s||'')+(off?('  ⏱'+(off>0?'+':'')+off.toFixed(1)+'s'):'');}
   ov.querySelector('#ly-m').onclick=()=>setOff(off-0.5);
   ov.querySelector('#ly-p').onclick=()=>setOff(off+0.5);
-  ov.querySelector('#ly-h').onclick=()=>ov.classList.toggle('hide');
+  // 隐藏偏好跨歌曲记忆(localStorage);烧录字幕的"已内嵌"提示也尊重这个开关
+  let userHidden=localStorage.getItem('ly_hidden')==='1';
+  if(userHidden)ov.classList.add('hide');
+  ov.querySelector('#ly-h').onclick=()=>{
+    userHidden=!userHidden;
+    localStorage.setItem('ly_hidden',userHidden?'1':'0');
+    ov.classList.toggle('hide',userHidden);
+  };
   window.loadLyrics=async function(songId){
     const my=reqId=songId;LINES=[];el.src.textContent='';el.base.textContent='';el.hiT.textContent='';
     el.hi.style.width='0';el.n1.textContent='';el.n2.textContent='';
     try{
       const r=await fetch('/api/lyrics/'+my);const d=await r.json();
       if(reqId!==my)return;
-      if(d.burned){el.src.textContent='✅ 逐字字幕已内嵌MV';ov.classList.remove('hide');return;}
+      if(d.burned){if(!userHidden){el.src.textContent='✅ 逐字字幕已内嵌MV';}return;}
       if(d.lyrics&&d.lyrics.length){LINES=d.lyrics;el.src.dataset.s=d.source||'';setOff(off);}
     }catch(e){}
   };
