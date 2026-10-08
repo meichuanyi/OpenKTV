@@ -96,6 +96,22 @@ router.post('/separate', async (req, res) => {
   }
 });
 
+// 纯音频转MV:曲库目录或 musicdl 音乐目录里的 mp3/flac 一键变成可唱曲目。
+router.post('/audio2mv', async (req, res) => {
+  const filename = String((req.body || {}).filename || '');
+  if (!filename) return res.status(400).json({ error: 'filename 必填' });
+  try {
+    const r = await toolsJSON('/audio2mv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename }),
+    });
+    res.status(r.status).json(r.body);
+  } catch (e) {
+    res.status(502).json({ error: '工具服务不可达: ' + e.message });
+  }
+});
+
 // 给已有双音轨 MV 补内嵌逐字歌词(取词→人声对齐→ASS烧录)。
 router.post('/lyricize', async (req, res) => {
   const raw = String((req.body || {}).filename || '');

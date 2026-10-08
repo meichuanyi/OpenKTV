@@ -105,6 +105,17 @@ const TOOLS = [
     },
   },
   {
+    name: 'audio_to_mv',
+    description: '纯音频转MV:把MP3等音频文件(曲库目录或musicdl音乐目录)包装成静态背景MV,自动AI分离双音轨+逐字字幕,一步入库',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filename: { type: 'string', description: '音频文件名,如 "许嵩 - 灰色头像.mp3";musicdl目录可带子路径' },
+      },
+      required: ['filename'],
+    },
+  },
+  {
     name: 'download_tasks',
     description: '查看下载/分离任务进度',
     inputSchema: { type: 'object', properties: {} },
@@ -225,6 +236,15 @@ module.exports = function createMcp({ db, broadcastQueue, log, scanLibrary, remo
         body: JSON.stringify({ url: a.url, title: a.title, artist: a.artist || '', quality: a.quality || '720' }),
       });
       return { content: [{ type: 'text', text: JSON.stringify(r.body, null, 2) }] };
+    },
+    audio_to_mv: async (a) => {
+      const r = await toolsJSON('/audio2mv', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: a.filename }),
+      });
+      return { content: [{ type: 'text', text: r.body.task_id
+        ? `已加入队列(task ${r.body.task_id}):包装画面→AI分离→字幕烧录,完成后自动入库,可在「任务」页看进度`
+        : JSON.stringify(r.body) }] };
     },
     download_tasks: async () => {
       const r = await toolsJSON('/tasks');

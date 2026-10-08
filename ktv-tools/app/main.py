@@ -79,6 +79,8 @@ def _worker():
                 _run_separate_task(task)
             elif task.get("kind") == "lyricize":
                 _run_lyricize_task(task)
+            elif task.get("kind") == "audio2mv":
+                _run_audio2mv_task(task)
             else:
                 _run_download_task(task)
         except Exception as e:  # noqa: BLE001 —— 队列 worker 兜一切异常
@@ -571,6 +573,134 @@ def _burn_lyrics(file: Path, task: dict) -> dict:
         return {"lyrics": "burned", "lyric_source": source, "lyric_fit": fit_summary}
     except Exception as e:  # 烧录失败不影响歌曲可用性
         return {"lyrics": "failed", "lyric_error": str(e)[:200]}
+
+
+# ---------- 音频转 MV(纯 mp3/flac 兜底) ----------
+
+AUDIO_EXT = {".mp3", ".flac", ".wav", ".m4a", ".ogg", ".ape", ".wma"}
+FONT_CJK = "/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc"
+
+
+def _find_audio(rel: str) -> Path | None:
+    """按 相对路径/文件名 在曲库目录和音乐目录(/music, 如 musicdl 库)找音频。
+
+    musicdl 的目录结构是 歌手/专辑/歌名 - 歌曲ID.mp3,调用方往往只知道文件名,
+    所以精确路径找不到时,在两个根目录下递归按文件名搜一层兜底。
+    """
+    cand = Path(str(rel).replace("\\", "/"))
+    if cand.suffix.lower() not in AUDIO_EXT:
+        return None
+    for base in (LIBRARY_DIR, Path("/music")):
+        p = base / cand
+        try:
+            if p.is_file() and base in p.resolve().parents:
+                return p
+        except OSError:
+            continue
+    name = cand.name
+    for base in (LIBRARY_DIR, Path("/music")):
+        if not base.is_dir():
+            continue
+        for root, _dirs, files in os.walk(base):
+            if name in files:
+                return Path(root) / name
+    return None
+
+
+def _audio_meta(audio: Path) -> tuple[str, str]:
+    """从 musicdl 式路径解析歌手/歌名:歌手=一级目录,歌名=stem 去掉" - 数字ID"。"""
+    rel = None
+    for base in (Path("/music"), LIBRARY_DIR):
+        try:
+            rel = audio.resolve().relative_to(base.resolve())
+            break
+        except ValueError:
+            continue
+    artist = ""
+    if rel and len(rel.parts) > 1:
+        head = rel.parts[0]
+        if head and not head.replace(".", "").isdigit():
+            artist = _sanitize(head)
+    stem = audio.stem
+    m = re.match(r"^(.+?)\s*-\s*\d{6,}$", stem)
+    title = _clean_noise(m.group(1).strip()) if m else stem
+    if not artist:
+        artist, title = _guess_artist_title("", title)
+    return artist, _sanitize(title)
+
+
+def _wrap_audio(src: Path, task: dict) -> Path:
+    """纯音频 → 静态背景 MKV(歌名/歌手画面),之后完全复用分离+烧录管线。"""
+    task["status"] = "wrapping"
+    task["progress"] = 5
+    STAGING_DIR.mkdir(parents=True, exist_ok=True)
+
+    def esc(t: str) -> str:
+        return _sanitize(t).replace(":", " ").replace("'", "")[:28]
+
+    title_s = esc(task.get("title") or src.stem)
+    artist_s = esc(task.get("artist") or "未知歌手")
+    bg = STAGING_DIR / "bg.png"
+    _run_ffmpeg([
+        "/usr/bin/ffmpeg", "-y", "-v", "error",
+        "-f", "lavfi", "-i", "color=c=0x0e0e22:s=1280x720:d=1",
+        "-vf", (
+            f"drawtext=fontfile={FONT_CJK}:text='{title_s}':"
+            "fontcolor=0xE8E8FF:fontsize=72:x=(w-text_w)/2:y=h/2-70,"
+            f"drawtext=fontfile={FONT_CJK}:text='{artist_s}':"
+            "fontcolor=0x9A9AC2:fontsize=40:x=(w-text_w)/2:y=h/2+30,"
+            "drawtext=fontfile=" + FONT_CJK + ":text='OpenKTV':"
+            "fontcolor=0x5A5A88:fontsize=26:x=(w-text_w)/2:y=h-70"
+        ),
+        "-frames:v", "1", str(bg),
+    ], 60)
+
+    wrapped = STAGING_DIR / "wrapped.mkv"
+    # 12fps 足够字幕扫光平滑;静态画面编码开销极小
+    _run_ffmpeg([
+        "/usr/bin/ffmpeg", "-y", "-v", "error",
+        "-loop", "1", "-i", str(bg), "-i", str(src),
+        "-map", "0:v", "-map", "1:a",
+        "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage",
+        "-r", "12", "-g", "48", "-pix_fmt", "yuv420p",
+        "-c:a", "copy", "-shortest", str(wrapped),
+    ], 1800)
+    return wrapped
+
+
+def _run_audio2mv_task(task: dict):
+    audio = Path(task["file"]) if Path(task["file"]).is_file() else _find_audio(task["file"])
+    if not audio:
+        raise RuntimeError(f"音频文件不存在: {task['file']}")
+    wrapped = _wrap_audio(audio, task)
+    name = _sanitize(f"{task['artist']} - {task['title']}" if task.get("artist") else task["title"])
+    base = LIBRARY_DIR / f"{name}.mkv"
+    shutil.move(str(wrapped), str(base))
+    merged = _separate_and_merge(base, task)
+    result = {"filename": merged["filename"], **merged}
+    if AUTO_LYRICS and merged.get("audio_tracks") == 2:
+        result.update(_burn_lyrics(LIBRARY_DIR / merged["filename"], task))
+    task["result"] = result
+    task["progress"] = 100
+    task["status"] = "done"
+
+
+class AudioBody(BaseModel):
+    filename: str
+
+
+@app.post("/audio2mv")
+def audio2mv(body: AudioBody):
+    """纯音频转 MV:静态背景包装 → AI分离双音轨 → 逐字字幕烧录,一步到位。"""
+    audio = _find_audio(body.filename)
+    if not audio:
+        raise HTTPException(404, f"没找到音频(支持{','.join(sorted(AUDIO_EXT))}): {body.filename}")
+    artist, title = _audio_meta(audio)
+    tid = _register({
+        "kind": "audio2mv", "file": str(audio),
+        "artist": artist, "title": title or audio.stem,
+    })
+    return {"task_id": tid, "artist": artist, "title": title}
 
 
 class LyricizeBody(BaseModel):

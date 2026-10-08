@@ -688,6 +688,7 @@ function updateTaskButtons(tasks){
     else if(t.status==='separating'){b.textContent='AI分离中';}
     else if(t.status==='merging'){b.textContent='合成音轨';}
     else if(t.status==='lyrics'){b.textContent='内嵌歌词';}
+    else if(t.status==='wrapping'){b.textContent='生成画面';}
     else if(t.status==='done'){
       b.textContent='已入库✓';
       b.style.background='rgba(54,217,247,.35)';
@@ -724,7 +725,7 @@ function renderTasks(tasks){
     wrap.innerHTML='<div style="color:#555;text-align:center;padding:40px 0;font-size:13px">暂无任务,去「在线」Tab 搜歌下载吧</div>';
     return;
   }
-  const stMap={queued:'排队中',downloading:'下载中',moving:'入库中',extracting:'提取音频',separating:'AI分离中',merging:'合成双音轨',lyrics:'内嵌歌词中',done:'已完成',failed:'失败'};
+  const stMap={queued:'排队中',downloading:'下载中',moving:'入库中',extracting:'提取音频',separating:'AI分离中',merging:'合成双音轨',lyrics:'内嵌歌词中',wrapping:'生成画面',done:'已完成',failed:'失败'};
   tasks.slice(0,10).forEach(t=>{
     const row=document.createElement('div');
     row.className='task-row';

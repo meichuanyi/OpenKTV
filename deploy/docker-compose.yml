@@ -44,6 +44,7 @@ services:
       - AUTO_LYRICS=1                      # 自动烧录逐字歌词进MV:1开/0关(关了用电视浮层歌词)
     volumes:
       - /vol2/1000/ktv/mv:/library         # 与主服务的曲库目录指向同一宿主机目录
+      - /vol2/1000/music:/music:ro         # 可选:音乐下载库(如musicdl),音频转MV的素材来源
     deploy:
       resources:
         limits:
