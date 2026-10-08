@@ -20,7 +20,7 @@ HOP = 1024  # ~46ms
 _UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120"
 
 
-# ---------- 歌词获取(网易云严格匹配 → QQ音乐兜底,与 junyao lyrics.js 同策略) ----------
+# ---------- 歌词获取(网易云严格匹配 → QQ音乐兜底,与主服务 lyrics.js 同策略) ----------
 
 def fetch_lrc(title: str, artist: str) -> tuple[str, str] | None:
     """返回 (lrc文本, 来源描述) 或 None。"""

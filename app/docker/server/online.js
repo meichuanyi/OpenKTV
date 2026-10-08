@@ -1,5 +1,5 @@
 // 在线搜索/下载 —— 融合改造新增模块(feature/online-fusion)。
-// 仅为 junyao 主服务与 ktv-tools 工具服务之间的代理层:搜索、封面、
+// 仅为 OpenKTV 主服务与 ktv-tools 工具服务之间的代理层:搜索、封面、
 // 下载下单、任务进度。真正的搜索/yt-dlp 下载都在 ktv-tools 容器里,
 // 主服务只转发,不在本镜像里引入 Python/网络依赖。
 //

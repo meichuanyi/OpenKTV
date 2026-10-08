@@ -1,8 +1,8 @@
-"""ktv-tools:junyao-ktv 的在线搜索 / 下载工具服务。
+"""ktv-tools:OpenKTV 的在线搜索 / 下载工具服务。
 
 职责刻意收窄:B站 + YouTube 搜索、yt-dlp 下载、文件名规范化后落曲库目录。
 下载/后续的分离任务走同一条串行队列(单 worker),适配 NAS 的有限算力;
-任务状态存内存,junyao 前端通过 /tasks 轮询展示进度。
+任务状态存内存,主服务前端通过 /tasks 轮询展示进度。
 """
 
 import os
@@ -41,7 +41,7 @@ def _proxy_args(url: str) -> list[str]:
     if YTDLP_PROXY and any(d in url for d in _PROXY_DOMAINS):
         return ["--proxy", YTDLP_PROXY]
     return []
-# 文件名里的非法字符(NTFS/Windows 习惯 + junyao scanner 的分隔符歧义)
+# 文件名里的非法字符(NTFS/Windows 习惯 + 曲库 scanner 的分隔符歧义)
 _UNSAFE_CHARS = re.compile(r'[\\/:*?"<>|\r\n\t]')
 
 app = FastAPI(title="ktv-tools")
@@ -364,7 +364,7 @@ def _guess_artist_title(artist: str, title: str) -> tuple[str, str]:
     """歌手没填时,从视频标题里猜:优先 "歌手《歌名》",其次 "歌手 - 歌名"。
 
     B站标题常见 "周杰伦《晴天》MV官方版"、"晴天- 周杰伦(KTV版)" 这类;
-    猜不出就整段当歌名,junyao scanner 本来也接受纯歌名文件。
+    猜不出就整段当歌名,曲库 scanner 本来也接受纯歌名文件。
     """
     title = _sanitize(title)
     if artist:
@@ -507,7 +507,7 @@ def _separate_and_merge(src: Path, task: dict) -> dict:
 
 def _burn_lyrics(file: Path, task: dict) -> dict:
     """取词→人声对齐→ASS逐字→烧进视频(音轨无损copy)。成功后写 .ktv-ok 标记,
-    junyao 的歌词接口看到标记就让浮层让位(字幕已经在画面里了)。"""
+    主服务的歌词接口看到标记就让浮层让位(字幕已经在画面里了)。"""
     try:
         title = task.get("title") or file.stem
         artist = task.get("artist") or ""
@@ -568,7 +568,7 @@ class SeparateBody(BaseModel):
 
 @app.post("/separate")
 def separate(body: SeparateBody):
-    """对曲库内已有的单音轨文件补伴唱(junyao 传来的 filename 可能带 library1/ 前缀)。"""
+    """对曲库内已有的单音轨文件补伴唱(主服务传来的 filename 可能带 library1/ 前缀)。"""
     fname = Path(str(body.filename).replace("\\", "/")).name  # 只取文件名,防目录穿越
     src = LIBRARY_DIR / fname
     if not src.is_file():

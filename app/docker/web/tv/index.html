@@ -15,7 +15,7 @@
 // 用它来强制撑满，兼容性明显更好。首次进入、以及窗口尺寸变化(比如TV分辨率
 // 切换、旋转)时都会重新校正一次。
 //
-// Bug6追查补充（二级菜单/弹窗位置不对 + 空闲态"骏耀K歌"占位符位置不对）：
+// Bug6追查补充（二级菜单/弹窗位置不对 + 空闲态"OpenKTV"占位符位置不对）：
 // 之前只对 #home 做了这层修正（把它的 width/height 用行内样式直接改成量出来
 // 的真实像素值），别的弹层完全没被修正过——但根因其实比"视口测量"更底层：
 // 这台电视浏览器的内核太老，压根不认识 CSS 的 inset 简写属性（inset 是较新的
@@ -192,7 +192,7 @@
   setTimeout(detectLayout, 1000);
 })();
 </script>
-<title>骏耀K歌</title>
+<title>OpenKTV</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.13/hls.min.js" defer></script>
 <style>
@@ -796,7 +796,7 @@ html[data-layout="mobile"] .song-list-2col{grid-template-columns:1fr}
 <div id="bg"></div>
 <div id="home">
   <nav id="topbar">
-    <div class="logo">骏耀K歌</div>
+    <div class="logo">OpenKTV</div>
     <button class="nb" data-f onclick="openPanel('search')"><span class="nbi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span> 搜索</button>
     <button class="nb" data-f onclick="openPanel('queue')"><span class="nbi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span> 已点<span class="badge" id="qbadge">0</span></button>
     <div id="conn-status" class="conn-badge bad" title="与后端服务器连接状态"><span class="nbi" id="conn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg></span><span id="conn-lbl">连接中…</span></div>
@@ -808,7 +808,7 @@ html[data-layout="mobile"] .song-list-2col{grid-template-columns:1fr}
       <div id="now-panel" data-f onclick="enterFullscreen()">
         <video id="ktv-video" class="video-home" playsinline></video>
         <div id="video-loading"><div class="vl-spinner"></div><div class="vl-text">加载中…</div></div>
-        <div id="now-idle"><div class="idle-big">骏耀K歌</div><div class="idle-sub">扫码点歌 · 大屏沉浸演唱</div></div>
+        <div id="now-idle"><div class="idle-big">OpenKTV</div><div class="idle-sub">扫码点歌 · 大屏沉浸演唱</div></div>
         <div id="now-info"><div class="ni-t" id="ni-title">—</div><div class="ni-m" id="ni-meta">—</div></div>
         <div id="qr-corner" onclick="event.stopPropagation();openPanel('qr')"><div id="home-qr"></div><div class="qr-lbl">扫码点歌</div></div>
       </div>

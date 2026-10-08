@@ -5,9 +5,9 @@
 #      工具服务镜像: 先构建 maiba 基础镜像(见 README),再 docker build -t openktv:tools ktv-tools
 #   3. docker compose up -d
 services:
-  junyao-ktv:
+  openktv-server:
     image: openktv:server
-    container_name: junyao-ktv
+    container_name: openktv-server
     restart: unless-stopped
     ports:
       - "8083:8080"
@@ -18,22 +18,22 @@ services:
       - ADMIN_PASSWORD=change-me
       - VAAPI_DEVICE=/dev/dri/renderD128   # 无核显删掉此行与下方 devices
       - HLS_CACHE_MAX_AGE_DAYS=3
-      - TOOLS_URL=http://ktv-tools:9000
+      - TOOLS_URL=http://openktv-tools:9000
       - AI_BASE_URL=http://YOUR-LLM-HOST:4000/v1   # OpenAI兼容接口(litellm/ollama/new-api均可),不配则AI功能返回503
       - AI_API_KEY=sk-your-key
       - AI_MODEL=glm-5.3-flash
     volumes:
-      - /vol1/1000/docker/junyao-ktv/data:/data
+      - /vol1/1000/docker/openktv/data:/data
       - /vol2/1000/ktv/mv:/mv/library1
       - /vol2/1000/ktv/singer:/singer
     devices:
       - /dev/dri:/dev/dri
     depends_on:
-      - ktv-tools
+      - openktv-tools
 
-  ktv-tools:
+  openktv-tools:
     image: openktv:tools
-    container_name: ktv-tools
+    container_name: openktv-tools
     user: "1000:1001"                      # 与曲库目录属主一致,避免 root 落盘
     restart: unless-stopped
     environment:
@@ -43,7 +43,7 @@ services:
       - SEPARATE_TIMEOUT=1800              # 单首分离限时(秒)
       - AUTO_LYRICS=1                      # 自动烧录逐字歌词进MV:1开/0关(关了用电视浮层歌词)
     volumes:
-      - /vol2/1000/ktv/mv:/library         # 与 junyao 的曲库目录指向同一宿主机目录
+      - /vol2/1000/ktv/mv:/library         # 与主服务的曲库目录指向同一宿主机目录
     deploy:
       resources:
         limits:

@@ -1,6 +1,6 @@
 // 统一日志格式：[时间] [标签] 内容
 // 所有日志都走 console.log/warn/error，会原样进 stdout/stderr，
-// 因此 `docker logs -f junyao-ktv` 就能看到，不需要额外配置。
+// 因此 `docker logs -f openktv-server` 就能看到，不需要额外配置。
 //
 // 标签约定（方便 grep 排查问题）：
 //   [VAAPI]     核显(VAAPI)硬件加速探测/初始化相关
